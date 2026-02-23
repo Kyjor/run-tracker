@@ -10,6 +10,7 @@ import { ProgressRing } from '../components/ui/ProgressRing';
 import { EmptyState } from '../components/ui/EmptyState';
 import { Spinner } from '../components/ui/Spinner';
 import { Button } from '../components/ui/Button';
+import { PullToRefresh } from '../components/ui/PullToRefresh';
 import { usePlan } from '../contexts/PlanContext';
 import { useDb } from '../contexts/DatabaseContext';
 import { useSettings } from '../contexts/SettingsContext';
@@ -97,6 +98,32 @@ export function DashboardScreen() {
     ));
   }
 
+  // Refresh all dashboard data
+  const handleRefresh = useCallback(async () => {
+    if (!db) return;
+    setDataLoading(true);
+    const today = format(new Date(), 'yyyy-MM-dd');
+    const weekStart = format(startOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd');
+    const weekEnd = format(endOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd');
+
+    const [runs, goals, stats] = await Promise.all([
+      getRuns(db, 5),
+      getActiveGoals(db, today),
+      getRunStats(db, settings.units, weekStart, weekEnd),
+    ]);
+    setRecentRuns(runs);
+    setWeekStats(stats);
+
+    const progressArr = await Promise.all(goals.map(g => getGoalProgress(db, g)));
+    setGoalProgress(progressArr);
+    setDataLoading(false);
+
+    // Also refresh feed if user is logged in
+    if (user) {
+      await refreshFeed();
+    }
+  }, [db, settings.units, user, refreshFeed]);
+
   // Compute week run progress
   const weekProgress = { completed: 0, total: 0 };
   // This could be derived from plan days vs runs in week; simple count for now
@@ -110,13 +137,14 @@ export function DashboardScreen() {
   }
 
   return (
-    <div className="flex flex-col flex-1 overflow-y-auto pb-24">
+    <div className="flex flex-col flex-1 overflow-hidden">
       <Header
         title={`Good ${getGreeting()}, Runner`}
         subtitle={format(new Date(), 'EEEE, MMMM d')}
       />
 
-      <div className="px-4 pt-4 flex flex-col gap-4">
+      <PullToRefresh onRefresh={handleRefresh}>
+        <div className="px-4 pt-4 pb-24 flex flex-col gap-4">
         {/* Today's Activity */}
         <div>
           <SectionHeader title="Today" />
@@ -260,7 +288,8 @@ export function DashboardScreen() {
             )}
           </div>
         )}
-      </div>
+        </div>
+      </PullToRefresh>
     </div>
   );
 }

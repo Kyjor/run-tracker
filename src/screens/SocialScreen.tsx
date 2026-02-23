@@ -7,6 +7,7 @@ import { FollowButton } from '../components/social/FollowButton';
 import { EmptyState } from '../components/ui/EmptyState';
 import { Spinner } from '../components/ui/Spinner';
 import { Button } from '../components/ui/Button';
+import { PullToRefresh } from '../components/ui/PullToRefresh';
 import { getFeed, toggleLike, getFollowingWithProfiles, getFollowersWithProfiles } from '../services/socialService';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -73,6 +74,12 @@ export function SocialScreen() {
     ));
   }
 
+  const handleRefresh = useCallback(async () => {
+    if (tab === 'feed') await loadFeed();
+    else if (tab === 'following') await loadFollowing();
+    else await loadFollowers();
+  }, [tab, loadFeed, loadFollowing, loadFollowers]);
+
   if (!user) {
     return (
       <div className="flex flex-col flex-1">
@@ -94,7 +101,7 @@ export function SocialScreen() {
   ];
 
   return (
-    <div className="flex flex-col flex-1 overflow-y-auto pb-24">
+    <div className="flex flex-col flex-1 overflow-hidden">
       <Header
         title="Friends"
         rightAction={
@@ -122,7 +129,8 @@ export function SocialScreen() {
         ))}
       </div>
 
-      <div className="px-4 pt-3 flex flex-col gap-3">
+      <PullToRefresh onRefresh={handleRefresh}>
+        <div className="px-4 pt-3 pb-24 flex flex-col gap-3">
         {loading ? (
           <div className="flex justify-center py-16">
             <Spinner size="lg" className="text-primary-500" />
@@ -170,7 +178,8 @@ export function SocialScreen() {
             ))
           )
         )}
-      </div>
+        </div>
+      </PullToRefresh>
     </div>
   );
 }

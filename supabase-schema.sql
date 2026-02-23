@@ -211,6 +211,11 @@ CREATE TABLE IF NOT EXISTS plan_comments (
 CREATE INDEX IF NOT EXISTS idx_user_runs_user_date ON user_runs(user_id, date DESC);
 CREATE INDEX IF NOT EXISTS idx_user_goals_user ON user_goals(user_id);
 CREATE INDEX IF NOT EXISTS idx_active_plans_user ON active_plans(user_id);
+
+-- Ensure only one active plan per user (unique partial index)
+CREATE UNIQUE INDEX IF NOT EXISTS idx_active_plans_one_per_user 
+  ON active_plans(user_id) 
+  WHERE is_active = true;
 CREATE INDEX IF NOT EXISTS idx_training_plans_user ON training_plans(user_id);
 CREATE INDEX IF NOT EXISTS idx_plan_days_plan ON plan_days(plan_id, week_number, day_of_week);
 CREATE INDEX IF NOT EXISTS idx_follows_follower ON follows(follower_id);

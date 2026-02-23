@@ -108,17 +108,36 @@ export async function getWeeklyMileage(
   db: Database,
   unit: DistanceUnit,
   weeks = 12,
+  startDate?: string,
+  endDate?: string,
 ): Promise<{ week: string; miles: number }[]> {
   const result: { week: string; miles: number }[] = [];
+  const today = endDate ? parseISO(endDate) : new Date();
+  
   for (let i = weeks - 1; i >= 0; i--) {
-    const end = subDays(new Date(), i * 7);
+    const end = subDays(today, i * 7);
     const start = subDays(end, 6);
     const s = format(start, 'yyyy-MM-dd');
     const e = format(end, 'yyyy-MM-dd');
-    const rows = await db.select<RunRow[]>(
-      'SELECT distance_value, distance_unit FROM runs WHERE date >= $1 AND date <= $2',
-      [s, e],
-    );
+    
+    // Skip weeks outside the date range if specified
+    if (startDate && e < startDate) continue;
+    if (endDate && s > endDate) continue;
+    
+    let query = 'SELECT distance_value, distance_unit FROM runs WHERE date >= $1 AND date <= $2';
+    const params = [s, e];
+    
+    // Further filter by date range if provided
+    if (startDate && s < startDate) {
+      query = 'SELECT distance_value, distance_unit FROM runs WHERE date >= $1 AND date <= $2';
+      params[0] = startDate;
+    }
+    if (endDate && e > endDate) {
+      query = 'SELECT distance_value, distance_unit FROM runs WHERE date >= $1 AND date <= $2';
+      params[1] = endDate;
+    }
+    
+    const rows = await db.select<RunRow[]>(query, params);
     const miles = rows.reduce((sum, r) => sum + convertDistance(r.distance_value, r.distance_unit, unit), 0);
     result.push({ week: format(start, 'MMM d'), miles: parseFloat(miles.toFixed(1)) });
   }

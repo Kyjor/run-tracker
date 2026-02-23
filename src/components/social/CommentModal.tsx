@@ -57,10 +57,35 @@ export function CommentModal({ isOpen, onClose, activityId, onCommentAdded }: Co
   }
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Comments">
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Comments"
+      footer={
+        user ? (
+          <div className="flex gap-2">
+            <Input
+              value={commentText}
+              onChange={e => setCommentText(e.target.value)}
+              placeholder="Add a comment..."
+              onKeyDown={e => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSubmit();
+                }
+              }}
+              className="flex-1"
+            />
+            <Button onClick={handleSubmit} isLoading={submitting} disabled={!commentText.trim()}>
+              Post
+            </Button>
+          </div>
+        ) : undefined
+      }
+    >
       <div className="flex flex-col gap-4">
         {/* Comments list */}
-        <div className="flex-1 overflow-y-auto max-h-[50vh]">
+        <div className="flex-1 overflow-y-auto" style={{ maxHeight: 'calc(90dvh - 200px)' }}>
           {loading ? (
             <div className="flex justify-center py-8">
               <Spinner size="lg" className="text-primary-500" />
@@ -86,27 +111,6 @@ export function CommentModal({ isOpen, onClose, activityId, onCommentAdded }: Co
             </div>
           )}
         </div>
-
-        {/* Comment input */}
-        {user && (
-          <div className="flex gap-2 pt-2 border-t border-gray-100 dark:border-gray-700">
-            <Input
-              value={commentText}
-              onChange={e => setCommentText(e.target.value)}
-              placeholder="Add a comment..."
-              onKeyDown={e => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  handleSubmit();
-                }
-              }}
-              className="flex-1"
-            />
-            <Button onClick={handleSubmit} isLoading={submitting} disabled={!commentText.trim()}>
-              Post
-            </Button>
-          </div>
-        )}
       </div>
     </Modal>
   );

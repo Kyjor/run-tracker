@@ -86,6 +86,15 @@ async function pushDirtyGoals(db: Database, userId: string): Promise<void> {
 async function pushDirtyActivePlan(db: Database, userId: string): Promise<void> {
   const dirty = await db.select<ActivePlan[]>("SELECT * FROM active_plan WHERE sync_status != 'synced'");
   for (const ap of dirty) {
+    // If this is being set as active, deactivate all other active plans for this user first
+    if (ap.is_active) {
+      await supabase
+        .from('active_plans')
+        .update({ is_active: false })
+        .eq('user_id', userId)
+        .eq('is_active', true);
+    }
+    
     const { error } = await supabase.from('active_plans').upsert({
       id: ap.id,
       user_id: userId,
@@ -125,29 +134,67 @@ async function pushDirtyCustomPlans(db: Database, userId: string): Promise<void>
   }
 }
 
-/** Pull remote runs that don't exist locally (e.g. from another device) */
+/** Pull remote data that doesn't exist locally (e.g. from another device) */
 export async function pullFromCloud(db: Database): Promise<void> {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) return;
 
+  // Pull runs
   const { data: remoteRuns } = await supabase
     .from('user_runs')
     .select('*')
     .eq('user_id', session.user.id);
 
-  if (!remoteRuns) return;
+  if (remoteRuns) {
+    for (const run of remoteRuns) {
+      const existing = await db.select<Run[]>('SELECT id FROM runs WHERE id=$1', [run.id]);
+      if (existing.length === 0) {
+        await db.execute(
+          `INSERT INTO runs
+            (id, date, distance_value, distance_unit, duration_seconds, run_type, plan_day_id, notes, source, created_at, updated_at, sync_status)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'synced')`,
+          [run.id, run.date, run.distance_value, run.distance_unit, run.duration_seconds,
+           run.run_type, run.plan_day_id, run.notes, run.source, run.created_at, run.updated_at],
+        );
+      }
+    }
+  }
 
-  for (const run of remoteRuns) {
-    const existing = await db.select<Run[]>('SELECT id FROM runs WHERE id=$1', [run.id]);
-    if (existing.length === 0) {
+  // Pull active plan (only one should be active per user)
+  const { data: remoteActivePlan } = await supabase
+    .from('active_plans')
+    .select('*')
+    .eq('user_id', session.user.id)
+    .eq('is_active', true)
+    .maybeSingle();
+
+  if (remoteActivePlan) {
+    // Deactivate local active plans first
+    await db.execute("UPDATE active_plan SET is_active = 0");
+    
+    // Check if this plan already exists locally
+    const existing = await db.select<ActivePlan[]>(
+      'SELECT * FROM active_plan WHERE id = $1',
+      [remoteActivePlan.id],
+    );
+    
+    if (existing.length > 0) {
+      // Update existing
       await db.execute(
-        `INSERT INTO runs
-          (id, date, distance_value, distance_unit, duration_seconds, run_type, plan_day_id, notes, source, created_at, updated_at, sync_status)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'synced')`,
-        [run.id, run.date, run.distance_value, run.distance_unit, run.duration_seconds,
-         run.run_type, run.plan_day_id, run.notes, run.source, run.created_at, run.updated_at],
+        "UPDATE active_plan SET plan_id=$1, start_date=$2, is_active=1, sync_status='synced' WHERE id=$3",
+        [remoteActivePlan.plan_id, remoteActivePlan.start_date, remoteActivePlan.id],
+      );
+    } else {
+      // Insert new
+      await db.execute(
+        `INSERT INTO active_plan (id, plan_id, start_date, is_active, created_at, sync_status)
+         VALUES ($1,$2,$3,1,$4,'synced')`,
+        [remoteActivePlan.id, remoteActivePlan.plan_id, remoteActivePlan.start_date, remoteActivePlan.created_at],
       );
     }
+  } else {
+    // No active plan in cloud, deactivate local ones
+    await db.execute("UPDATE active_plan SET is_active = 0");
   }
 }
 

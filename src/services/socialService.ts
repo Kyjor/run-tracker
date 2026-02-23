@@ -4,7 +4,7 @@
  */
 
 import { supabase } from './supabaseClient';
-import type { Profile, Follow, FeedItem, FeedComment, Run } from '../types';
+import type { Profile, Follow, FeedItem, FeedComment, Run, TrainingPlan, PlanDay } from '../types';
 
 // ---------------------------------------------------------------------------
 // Profile
@@ -119,6 +119,63 @@ export async function getRunsByUser(userId: string, limit = 20): Promise<Run[]> 
   return (data ?? []) as Run[];
 }
 
+/** Fetch all runs for a user (for stats calculation) */
+export async function getAllRunsByUser(userId: string): Promise<Run[]> {
+  const { data } = await supabase
+    .from('user_runs')
+    .select('*')
+    .eq('user_id', userId)
+    .order('date', { ascending: true });
+  return (data ?? []) as Run[];
+}
+
+/** Get friend's active plan */
+export async function getActivePlanByUser(userId: string): Promise<{ plan_id: string; start_date: string; is_active: boolean } | null> {
+  const { data } = await supabase
+    .from('active_plans')
+    .select('plan_id, start_date, is_active')
+    .eq('user_id', userId)
+    .eq('is_active', true)
+    .single();
+  return data ?? null;
+}
+
+/** Get friend's training plan by ID */
+export async function getTrainingPlanById(planId: string): Promise<TrainingPlan | null> {
+  const { data } = await supabase
+    .from('training_plans')
+    .select('*')
+    .eq('id', planId)
+    .single();
+  return data ?? null;
+}
+
+/** Get friend's plan days for their active plan */
+export async function getPlanDaysByUser(userId: string, planId: string): Promise<PlanDay[]> {
+  // First get the plan - it could be a built-in plan (no user_id) or a custom plan (with user_id)
+  const { data: plan } = await supabase
+    .from('training_plans')
+    .select('id, is_builtin, user_id')
+    .eq('id', planId)
+    .single();
+  
+  if (!plan) return [];
+
+  // If it's a custom plan, verify it belongs to the user
+  if (!plan.is_builtin && plan.user_id !== userId) {
+    return [];
+  }
+
+  const { data: days } = await supabase
+    .from('plan_days')
+    .select('*')
+    .eq('plan_id', planId)
+    .order('week_number', { ascending: true })
+    .order('day_of_week', { ascending: true });
+  
+  return (days ?? []) as PlanDay[];
+}
+
 export async function isFollowing(targetId: string): Promise<boolean> {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) return false;
@@ -177,6 +234,7 @@ export async function getFeed(limit = 30, offset = 0): Promise<FeedItem[]> {
       duration: run.duration_seconds,
       run_type: run.run_type,
       run_id: run.id, // Store run ID in data for reference
+      run_date: run.date, // Store actual run date for display
     };
 
     // Check if feed_activity exists for this run (match by user, type, and created_at within 1 minute)
@@ -241,19 +299,42 @@ export async function getFeed(limit = 30, offset = 0): Promise<FeedItem[]> {
 export async function publishFeedActivity(
   activityType: string,
   data: Record<string, unknown>,
-): Promise<void> {
+): Promise<string | null> {
   const { data: { session } } = await supabase.auth.getSession();
-  if (!session) return;
-  await supabase.from('feed_activities').insert({
-    user_id: session.user.id,
-    activity_type: activityType,
-    data,
-  });
+  if (!session) return null;
+  const { data: activity, error } = await supabase
+    .from('feed_activities')
+    .insert({
+      user_id: session.user.id,
+      activity_type: activityType,
+      data,
+    })
+    .select('id')
+    .single();
+  if (error || !activity) return null;
+  return activity.id;
 }
 
 // ---------------------------------------------------------------------------
 // Comments & Likes
 // ---------------------------------------------------------------------------
+
+/** Find feed activity ID for a run (to view comments on own runs) */
+export async function getFeedActivityIdByRunId(runId: string): Promise<string | null> {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) return null;
+
+  // Find feed activity where data contains this run_id
+  const { data: activities } = await supabase
+    .from('feed_activities')
+    .select('id')
+    .eq('user_id', session.user.id)
+    .eq('activity_type', 'run_completed')
+    .contains('data', { run_id: runId })
+    .limit(1);
+
+  return activities && activities.length > 0 ? activities[0].id : null;
+}
 
 export async function getComments(activityId: string): Promise<FeedComment[]> {
   const { data: comments } = await supabase

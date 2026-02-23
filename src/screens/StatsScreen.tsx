@@ -26,9 +26,11 @@ export function StatsScreen() {
     async function load() {
       setLoading(true);
       const { start, end } = getDateRange(range);
+      // Calculate number of weeks to show based on range
+      const weeks = range === 'week' ? 1 : range === 'month' ? 4 : range === 'year' ? 52 : 52;
       const [s, wm, tb] = await Promise.all([
         getRunStats(db, settings.units, start, end),
-        getWeeklyMileage(db, settings.units, 12),
+        getWeeklyMileage(db, settings.units, weeks, start, end),
         getRunTypeBreakdown(db, settings.units, start, end),
       ]);
       setStats(s);
@@ -44,7 +46,8 @@ export function StatsScreen() {
       <Header title="Stats" />
 
       {/* Range Picker */}
-      <div className="flex px-4 gap-2 pt-3 pb-1 overflow-x-auto">
+      <div className="sticky top-0 z-20 bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
+        <div className="flex px-4 gap-2 pt-3 pb-2 overflow-x-auto">
         {(['week', 'month', 'year', 'all'] as Range[]).map(r => (
           <button
             key={r}
@@ -59,6 +62,7 @@ export function StatsScreen() {
             {r === 'week' ? 'This Week' : r === 'month' ? 'This Month' : r === 'year' ? 'This Year' : 'All Time'}
           </button>
         ))}
+        </div>
       </div>
 
       {loading ? (

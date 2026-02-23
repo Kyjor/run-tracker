@@ -4,6 +4,7 @@ import type { FeedItem } from '../../types';
 import { Card } from '../ui/Card';
 import { CommentModal } from './CommentModal';
 import { formatShortWithTime } from '../../utils/dateUtils';
+import { parseISO, format } from 'date-fns';
 import { formatDistance, formatDuration } from '../../utils/paceUtils';
 
 interface ActivityFeedItemProps {
@@ -77,7 +78,18 @@ export function ActivityFeedItem({ item, onLike, onCommentAdded }: ActivityFeedI
                 {formatDuration(d.duration as number)}
               </p>
             ) : null}
-            <p className="text-xs text-gray-400 mt-1">{formatShortWithTime(item.created_at)}</p>
+            <p className="text-xs text-gray-400 mt-1">
+              {item.activity_type === 'run_completed' && d.run_date
+                ? (() => {
+                    // Use run's date but keep the time from created_at for display
+                    const runDate = parseISO(d.run_date as string);
+                    const createdTime = parseISO(item.created_at);
+                    const combined = new Date(runDate);
+                    combined.setHours(createdTime.getHours(), createdTime.getMinutes(), createdTime.getSeconds());
+                    return formatShortWithTime(combined.toISOString());
+                  })()
+                : formatShortWithTime(item.created_at)}
+            </p>
           </div>
         </div>
 
