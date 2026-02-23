@@ -119,5 +119,19 @@ export function currentPlanPosition(startDate: string, durationWeeks: number): {
 // Guards & Helpers
 // ---------------------------------------------------------------------------
 
+/**
+ * Converts a calendar date to { weekNumber, dayOfWeek } relative to a plan's start date.
+ * Returns null if the date is before the start or beyond durationWeeks.
+ */
+export function dateToPlanPosition(
+  startDate: string,
+  targetDate: string,
+  durationWeeks: number,
+): { weekNumber: number; dayOfWeek: number } | null {
+  const diff = differenceInCalendarDays(parseISO(targetDate), parseISO(startDate));
+  if (diff < 0 || diff >= durationWeeks * 7) return null;
+  return { weekNumber: Math.floor(diff / 7) + 1, dayOfWeek: diff % 7 };
+}
+
 export { isToday, isSameDay, isAfter, isBefore, parseISO, addDays, format, getISODay };
 

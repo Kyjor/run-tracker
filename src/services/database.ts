@@ -88,6 +88,12 @@ CREATE INDEX IF NOT EXISTS idx_runs_date       ON runs(date);
 CREATE INDEX IF NOT EXISTS idx_plan_days_plan  ON plan_days(plan_id, week_number, day_of_week);
 `;
 
+// Migrations: run once per version, safe to retry (errors are swallowed)
+const MIGRATIONS = [
+  // v1 — add workout_segments to plan_days
+  `ALTER TABLE plan_days ADD COLUMN workout_segments TEXT`,
+];
+
 // ---------------------------------------------------------------------------
 // Init
 // ---------------------------------------------------------------------------
@@ -96,6 +102,9 @@ export async function getDatabase(): Promise<Database> {
   if (_db) return _db;
   _db = await Database.load('sqlite:runwithfriends.db');
   await _db.execute(SCHEMA);
+  for (const sql of MIGRATIONS) {
+    try { await _db.execute(sql); } catch { /* already applied */ }
+  }
   await seedBuiltinPlans(_db);
   return _db;
 }

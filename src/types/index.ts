@@ -60,7 +60,60 @@ export interface PlanDay {
   distance_unit: DistanceUnit;
   duration_minutes: number | null; // for cross_training
   description: string;
+  workout_segments: string | null; // JSON-encoded WorkoutSegment[]
 }
+
+// ============================================================
+// Pace Zones & Workout Structure
+// ============================================================
+
+export type PaceZoneType = 'easy' | 'long' | 'tempo' | 'intervals' | 'race' | 'recovery';
+
+export interface WorkoutSegment {
+  zone: PaceZoneType;
+  distance_value?: number;    // in user's distance unit
+  duration_minutes?: number;  // time-based segment
+  reps?: number;              // for repeating (e.g. 8× 400m)
+  description?: string;
+}
+
+export interface PaceZones {
+  easy: number;       // sec/unit
+  long: number;
+  tempo: number;
+  intervals: number;
+  race: number;
+  recovery: number;
+}
+
+// Defaults in sec/mile — sensible for a recreational runner
+export const DEFAULT_PACE_ZONES_MI: PaceZones = {
+  easy:      600, // 10:00/mi
+  long:      630, // 10:30/mi
+  tempo:     510, // 8:30/mi
+  intervals: 450, // 7:30/mi
+  race:      540, // 9:00/mi
+  recovery:  660, // 11:00/mi
+};
+
+// Defaults in sec/km
+export const DEFAULT_PACE_ZONES_KM: PaceZones = {
+  easy:      373, // 6:13/km
+  long:      391, // 6:31/km
+  tempo:     317, // 5:17/km
+  intervals: 280, // 4:40/km
+  race:      335, // 5:35/km
+  recovery:  410, // 6:50/km
+};
+
+export const PACE_ZONE_LABELS: Record<PaceZoneType, string> = {
+  easy:      'Easy',
+  long:      'Long',
+  tempo:     'Tempo',
+  intervals: 'Intervals',
+  race:      'Race',
+  recovery:  'Recovery',
+};
 
 export interface ActivePlan {
   id: string;
@@ -116,6 +169,7 @@ export interface AppSettings {
   onboarding_complete: boolean;
   sync_enabled: boolean;
   last_sync_at: string;
+  pace_zones: PaceZones;
 }
 
 export const DEFAULT_APP_SETTINGS: AppSettings = {
@@ -124,6 +178,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   onboarding_complete: false,
   sync_enabled: false,
   last_sync_at: '',
+  pace_zones: DEFAULT_PACE_ZONES_MI,
 };
 
 // ============================================================

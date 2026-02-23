@@ -87,8 +87,10 @@ export function LogRunScreen() {
 
       <div className="px-4 pt-4">
         <RunForm
+          key={existingRun?.id ?? 'new'}
           initialDate={locationState?.date}
-          prefillPlanDay={locationState?.prefill ?? (existingRun ? null : null)}
+          prefillPlanDay={locationState?.prefill ?? null}
+          existingRun={existingRun}
           onSubmit={handleSubmit}
         />
       </div>

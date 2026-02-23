@@ -12,18 +12,20 @@ import { ActivityLegend } from '../components/calendar/ActivityLegend';
 
 export function CalendarScreen() {
   const db = useDb();
-  const { activePlan, activePlanDetails } = usePlan();
+  const { activePlan, activePlanDetails, refresh } = usePlan();
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [selectedPlanDay, setSelectedPlanDay] = useState<PlanDay | null>(null);
   const [selectedRun, setSelectedRun] = useState<Run | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [refreshToken, setRefreshToken] = useState(0);
 
   async function handleSelectDate(iso: string) {
     setSelectedDate(iso);
-    // Load plan day for this date
     if (activePlan && activePlanDetails) {
       const allDays = await getPlanDays(db, activePlan.plan_id);
-      const match = allDays.find(d => planDayToDate(activePlan.start_date, d.week_number, d.day_of_week) === iso);
+      const match = allDays.find(
+        d => planDayToDate(activePlan.start_date, d.week_number, d.day_of_week) === iso,
+      );
       setSelectedPlanDay(match ?? null);
     } else {
       setSelectedPlanDay(null);
@@ -31,6 +33,11 @@ export function CalendarScreen() {
     const runs = await getRunsForDate(db, iso);
     setSelectedRun(runs[0] ?? null);
     setSheetOpen(true);
+  }
+
+  async function handlePlanDayUpdated() {
+    await refresh();
+    setRefreshToken(t => t + 1);
   }
 
   return (
@@ -46,6 +53,7 @@ export function CalendarScreen() {
           activePlanDetails={activePlanDetails}
           selectedDate={selectedDate}
           onSelectDate={handleSelectDate}
+          refreshToken={refreshToken}
         />
       </div>
 
@@ -57,8 +65,10 @@ export function CalendarScreen() {
         date={selectedDate}
         planDay={selectedPlanDay}
         run={selectedRun}
+        activePlan={activePlan}
+        durationWeeks={activePlanDetails?.duration_weeks ?? 0}
+        onPlanDayUpdated={handlePlanDayUpdated}
       />
     </div>
   );
 }
-

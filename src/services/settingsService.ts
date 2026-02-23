@@ -1,6 +1,6 @@
 import type Database from '@tauri-apps/plugin-sql';
-import type { AppSettings, DistanceUnit, DarkModePreference } from '../types';
-import { DEFAULT_APP_SETTINGS } from '../types';
+import type { AppSettings, DistanceUnit, DarkModePreference, PaceZones } from '../types';
+import { DEFAULT_APP_SETTINGS, DEFAULT_PACE_ZONES_MI, DEFAULT_PACE_ZONES_KM } from '../types';
 
 type SettingRow = { key: string; value: string };
 
@@ -9,16 +9,30 @@ export async function loadSettings(db: Database): Promise<AppSettings> {
   const map: Record<string, string> = {};
   rows.forEach(r => { map[r.key] = r.value; });
 
+  const units = (map['units'] as DistanceUnit) ?? DEFAULT_APP_SETTINGS.units;
+
+  let pace_zones: PaceZones;
+  if (map['pace_zones']) {
+    try {
+      pace_zones = JSON.parse(map['pace_zones']);
+    } catch {
+      pace_zones = units === 'km' ? DEFAULT_PACE_ZONES_KM : DEFAULT_PACE_ZONES_MI;
+    }
+  } else {
+    pace_zones = units === 'km' ? DEFAULT_PACE_ZONES_KM : DEFAULT_PACE_ZONES_MI;
+  }
+
   return {
-    units: (map['units'] as DistanceUnit) ?? DEFAULT_APP_SETTINGS.units,
+    units,
     dark_mode: (map['dark_mode'] as DarkModePreference) ?? DEFAULT_APP_SETTINGS.dark_mode,
     onboarding_complete: map['onboarding_complete'] === 'true',
     sync_enabled: map['sync_enabled'] === 'true',
     last_sync_at: map['last_sync_at'] ?? '',
+    pace_zones,
   };
 }
 
-export async function saveSetting(db: Database, key: keyof AppSettings, value: string): Promise<void> {
+export async function saveSetting(db: Database, key: string, value: string): Promise<void> {
   await db.execute(
     'INSERT INTO settings (key, value) VALUES ($1, $2) ON CONFLICT(key) DO UPDATE SET value = $2',
     [key, value],
@@ -27,7 +41,10 @@ export async function saveSetting(db: Database, key: keyof AppSettings, value: s
 
 export async function saveSettings(db: Database, settings: Partial<AppSettings>): Promise<void> {
   for (const [k, v] of Object.entries(settings)) {
-    await saveSetting(db, k as keyof AppSettings, String(v));
+    if (k === 'pace_zones') {
+      await saveSetting(db, 'pace_zones', JSON.stringify(v));
+    } else {
+      await saveSetting(db, k, String(v));
+    }
   }
 }
-

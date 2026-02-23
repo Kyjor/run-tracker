@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { PlanDay, RunType, DistanceUnit } from '../../types';
+import type { PlanDay, Run, RunType, DistanceUnit } from '../../types';
 import { RUN_TYPE_LABELS } from '../../types';
 import { Input, Textarea } from '../ui/Input';
 import { Select } from '../ui/Select';
@@ -22,6 +22,7 @@ interface RunFormValues {
 interface RunFormProps {
   initialDate?: string;
   prefillPlanDay?: PlanDay | null;
+  existingRun?: Run | null;
   onSubmit: (values: {
     date: string;
     distance_value: number;
@@ -40,18 +41,27 @@ const UNIT_OPTIONS: { value: string; label: string }[] = [
   { value: 'km', label: 'Kilometers' },
 ];
 
-export function RunForm({ initialDate, prefillPlanDay, onSubmit, isLoading }: RunFormProps) {
+function secsToHMS(total: number) {
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  return { h: h.toString(), m: m.toString(), s: s.toString() };
+}
+
+export function RunForm({ initialDate, prefillPlanDay, existingRun, onSubmit, isLoading }: RunFormProps) {
   const { settings } = useSettings();
 
+  const hms = existingRun ? secsToHMS(existingRun.duration_seconds) : null;
+
   const [values, setValues] = useState<RunFormValues>({
-    date: initialDate ?? today(),
-    distance_value: prefillPlanDay?.distance_value?.toString() ?? '',
-    distance_unit: prefillPlanDay?.distance_unit ?? settings.units,
-    hours: '0',
-    minutes: '',
-    seconds: '',
-    run_type: (prefillPlanDay?.activity_type as RunType | undefined) ?? 'easy_run',
-    notes: prefillPlanDay?.description ?? '',
+    date: existingRun?.date ?? initialDate ?? today(),
+    distance_value: existingRun?.distance_value?.toString() ?? prefillPlanDay?.distance_value?.toString() ?? '',
+    distance_unit: (existingRun?.distance_unit ?? prefillPlanDay?.distance_unit ?? settings.units) as DistanceUnit,
+    hours: hms?.h ?? '0',
+    minutes: hms?.m ?? '',
+    seconds: hms?.s ?? '',
+    run_type: (existingRun?.run_type ?? prefillPlanDay?.activity_type as RunType | undefined) ?? 'easy_run',
+    notes: existingRun?.notes ?? prefillPlanDay?.description ?? '',
   });
 
   const [errors, setErrors] = useState<Partial<Record<keyof RunFormValues, string>>>({});

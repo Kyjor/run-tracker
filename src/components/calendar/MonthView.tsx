@@ -12,11 +12,12 @@ interface MonthViewProps {
   activePlanDetails: TrainingPlan | null;
   onSelectDate: (date: string) => void;
   selectedDate: string | null;
+  refreshToken?: number;
 }
 
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
-export function MonthView({ activePlan, activePlanDetails, onSelectDate, selectedDate }: MonthViewProps) {
+export function MonthView({ activePlan, activePlanDetails, onSelectDate, selectedDate, refreshToken }: MonthViewProps) {
   const db = useDb();
   const [viewDate, setViewDate] = useState(new Date());
   const [planDays, setPlanDays] = useState<PlanDay[]>([]);
@@ -28,7 +29,7 @@ export function MonthView({ activePlan, activePlanDetails, onSelectDate, selecte
   useEffect(() => {
     if (!activePlan || !activePlanDetails) { setPlanDays([]); return; }
     getPlanDays(db, activePlan.plan_id).then(setPlanDays);
-  }, [db, activePlan, activePlanDetails]);
+  }, [db, activePlan, activePlanDetails, refreshToken]);
 
   useEffect(() => {
     if (gridDates.length < 2) return;

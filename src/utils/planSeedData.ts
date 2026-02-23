@@ -29,6 +29,7 @@ function buildDays(
         distance_unit: 'mi',
         duration_minutes: dur ?? null,
         description: desc ?? '',
+        workout_segments: null,
       });
     });
   });

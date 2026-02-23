@@ -5,6 +5,7 @@ import { Card, SectionHeader } from '../components/ui/Card';
 import { Toggle } from '../components/ui/Toggle';
 import { Select } from '../components/ui/Select';
 import { Button } from '../components/ui/Button';
+import { Input } from '../components/ui/Input';
 import { ConfirmModal } from '../components/ui/Modal';
 import { Spinner } from '../components/ui/Spinner';
 import { useSettings } from '../contexts/SettingsContext';
@@ -13,6 +14,9 @@ import { useDb } from '../contexts/DatabaseContext';
 import { useToast } from '../contexts/ToastContext';
 import { syncToCloud } from '../services/syncService';
 import { exportFullBackup, exportRunsCsv, restoreFromBackup, validateBackup } from '../services/backupService';
+import type { PaceZones, PaceZoneType } from '../types';
+import { PACE_ZONE_LABELS } from '../types';
+import { formatPaceFromSeconds, parsePaceString } from '../utils/workoutUtils';
 
 export function SettingsScreen() {
   const navigate = useNavigate();
@@ -165,6 +169,16 @@ export function SettingsScreen() {
           </Card>
         </div>
 
+        {/* Pace Zones */}
+        <div>
+          <SectionHeader title="Pace Zones" />
+          <PaceZonesEditor
+            paceZones={settings.pace_zones}
+            unit={settings.units}
+            onChange={zones => updateSettings({ pace_zones: zones })}
+          />
+        </div>
+
         {/* Apple Health (TODO) */}
         <div>
           <SectionHeader title="Apple Health" />
@@ -237,6 +251,66 @@ export function SettingsScreen() {
         confirmLabel="Clear Anyway"
       />
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Pace Zones Editor
+// ---------------------------------------------------------------------------
+
+const ZONE_ORDER: PaceZoneType[] = ['easy', 'long', 'tempo', 'intervals', 'race', 'recovery'];
+
+function PaceZonesEditor({
+  paceZones,
+  unit,
+  onChange,
+}: {
+  paceZones: PaceZones;
+  unit: 'mi' | 'km';
+  onChange: (z: PaceZones) => void;
+}) {
+  // Local draft state so user can type freely before committing
+  const [drafts, setDrafts] = useState<Record<PaceZoneType, string>>(() =>
+    Object.fromEntries(
+      ZONE_ORDER.map(z => [z, formatPaceFromSeconds(paceZones[z], unit).replace(`/${unit}`, '')]),
+    ) as Record<PaceZoneType, string>,
+  );
+
+  function handleBlur(zone: PaceZoneType, raw: string) {
+    const secs = parsePaceString(raw);
+    if (secs > 0) {
+      onChange({ ...paceZones, [zone]: secs });
+      setDrafts(d => ({ ...d, [zone]: formatPaceFromSeconds(secs, unit).replace(`/${unit}`, '') }));
+    } else {
+      // Reset to current saved value
+      setDrafts(d => ({ ...d, [zone]: formatPaceFromSeconds(paceZones[zone], unit).replace(`/${unit}`, '') }));
+    }
+  }
+
+  return (
+    <Card>
+      <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+        Enter pace as <strong>M:SS</strong> per {unit}. These are used to estimate workout finish times.
+      </p>
+      <div className="flex flex-col gap-3">
+        {ZONE_ORDER.map(zone => (
+          <div key={zone} className="flex items-center gap-3">
+            <span className="text-sm text-gray-700 dark:text-gray-300 w-20 flex-shrink-0">
+              {PACE_ZONE_LABELS[zone]}
+            </span>
+            <div className="flex-1">
+              <Input
+                value={drafts[zone]}
+                placeholder="M:SS"
+                onChange={e => setDrafts(d => ({ ...d, [zone]: e.target.value }))}
+                onBlur={e => handleBlur(zone, e.target.value)}
+                hint={`/${unit}`}
+              />
+            </div>
+          </div>
+        ))}
+      </div>
+    </Card>
   );
 }
 

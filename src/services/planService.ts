@@ -109,6 +109,67 @@ export async function upsertPlanDay(db: Database, day: PlanDay): Promise<void> {
   );
 }
 
+export async function updatePlanDay(
+  db: Database,
+  id: string,
+  data: {
+    activity_type: PlanDay['activity_type'];
+    distance_value: number | null;
+    distance_unit: PlanDay['distance_unit'];
+    duration_minutes: number | null;
+    description: string;
+    workout_segments?: string | null;
+    week_number?: number;
+    day_of_week?: number;
+  },
+): Promise<void> {
+  if (data.week_number !== undefined && data.day_of_week !== undefined) {
+    await db.execute(
+      `UPDATE plan_days
+         SET activity_type=$1, distance_value=$2, distance_unit=$3,
+             duration_minutes=$4, description=$5, workout_segments=$6,
+             week_number=$7, day_of_week=$8
+       WHERE id=$9`,
+      [data.activity_type, data.distance_value, data.distance_unit,
+       data.duration_minutes, data.description, data.workout_segments ?? null,
+       data.week_number, data.day_of_week, id],
+    );
+  } else {
+    await db.execute(
+      `UPDATE plan_days
+         SET activity_type=$1, distance_value=$2, distance_unit=$3,
+             duration_minutes=$4, description=$5, workout_segments=$6
+       WHERE id=$7`,
+      [data.activity_type, data.distance_value, data.distance_unit,
+       data.duration_minutes, data.description, data.workout_segments ?? null, id],
+    );
+  }
+}
+
+/**
+ * Swap two plan days' positions (week_number / day_of_week).
+ * Used when moving a plan day to a slot that already has another plan day.
+ */
+export async function swapPlanDayPositions(
+  db: Database,
+  dayA: PlanDay,
+  dayB: PlanDay,
+): Promise<void> {
+  // Temporarily move A to an impossible slot to avoid unique constraint issues
+  await db.execute(
+    'UPDATE plan_days SET week_number=-1, day_of_week=-1 WHERE id=$1',
+    [dayA.id],
+  );
+  await db.execute(
+    'UPDATE plan_days SET week_number=$1, day_of_week=$2 WHERE id=$3',
+    [dayA.week_number, dayA.day_of_week, dayB.id],
+  );
+  await db.execute(
+    'UPDATE plan_days SET week_number=$1, day_of_week=$2 WHERE id=$3',
+    [dayB.week_number, dayB.day_of_week, dayA.id],
+  );
+}
+
 export async function deletePlanDay(db: Database, dayId: string): Promise<void> {
   await db.execute('DELETE FROM plan_days WHERE id = $1', [dayId]);
 }

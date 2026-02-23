@@ -8,6 +8,7 @@ import { formatDistance, formatDuration } from '../../utils/paceUtils';
 import { getRestDayMessage, getCrossTrainingMessage } from '../../utils/restDayMessages';
 import { today } from '../../utils/dateUtils';
 import { useSettings } from '../../contexts/SettingsContext';
+import { WorkoutDisplay } from '../workout/WorkoutDisplay';
 
 interface TodayActivityCardProps {
   activity: TodayActivity;
@@ -98,6 +99,18 @@ export function TodayActivityCard({ activity, weekNumber, dayOfWeek, weekProgres
             )}
           </div>
         </div>
+
+        {/* Structured workout */}
+        {!isRest && !isCross && (
+          <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-700">
+            <WorkoutDisplay
+              planDay={plan_day}
+              paceZones={settings.pace_zones}
+              unit={settings.units}
+              compact
+            />
+          </div>
+        )}
 
         {/* Week progress bar */}
         {weekProgress.total > 0 && (

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 import type { TrainingPlan, PlanDay } from '../types';
-import { RACE_TYPE_LABELS, DIFFICULTY_LABELS } from '../types';
+import { RACE_TYPE_LABELS, DIFFICULTY_LABELS, ACTIVITY_LABELS, ACTIVITY_COLORS } from '../types';
 import { Header } from '../components/navigation/Header';
 import { PlanPreview } from '../components/plan/PlanPreview';
 import { Button } from '../components/ui/Button';
@@ -11,8 +11,11 @@ import { Badge } from '../components/ui/Badge';
 import { useDb } from '../contexts/DatabaseContext';
 import { usePlan } from '../contexts/PlanContext';
 import { useToast } from '../contexts/ToastContext';
+import { useSettings } from '../contexts/SettingsContext';
 import { getPlanById, getPlanDays, setActivePlan, exportPlanToFormat, deletePlan } from '../services/planService';
 import { ConfirmModal } from '../components/ui/Modal';
+import { WorkoutDisplay, EstimatedTimeBadge } from '../components/workout/WorkoutDisplay';
+import { formatDistance } from '../utils/paceUtils';
 
 function groupByWeek(days: PlanDay[]): PlanDay[][] {
   const weeks: PlanDay[][] = [];
@@ -30,6 +33,8 @@ export function PlanDetailScreen() {
   const db = useDb();
   const { activePlan, refresh } = usePlan();
   const { showToast } = useToast();
+  const { settings } = useSettings();
+  const [expandedWeek, setExpandedWeek] = useState<number | null>(null);
 
   const [plan, setPlan] = useState<TrainingPlan | null>(null);
   const [days, setDays] = useState<PlanDay[]>([]);
@@ -137,11 +142,68 @@ export function PlanDetailScreen() {
           </>
         )}
 
-        {/* Preview */}
+        {/* Overview grid */}
         <Card>
-          <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Schedule Preview</p>
+          <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Schedule Overview</p>
           <PlanPreview weeks={groupByWeek(days)} maxWeeks={6} />
         </Card>
+
+        {/* Per-week detail with pace estimates */}
+        <div className="flex flex-col gap-2">
+          <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 px-1">Weekly Breakdown</p>
+          {groupByWeek(days).map((week, wi) => {
+            const runDays = week.filter(d => d && d.activity_type !== 'rest' && d.activity_type !== 'cross_training');
+            const isExpanded = expandedWeek === wi;
+            return (
+              <Card key={wi} padding={false} className="overflow-hidden">
+                <button
+                  className="w-full flex items-center justify-between px-4 py-3 text-left active:opacity-70"
+                  onClick={() => setExpandedWeek(isExpanded ? null : wi)}
+                >
+                  <span className="text-sm font-semibold text-gray-800 dark:text-gray-100">
+                    Week {wi + 1}
+                  </span>
+                  <span className="text-xs text-gray-400">{runDays.length} run{runDays.length !== 1 ? 's' : ''} · {isExpanded ? '▲' : '▼'}</span>
+                </button>
+
+                {isExpanded && (
+                  <div className="px-4 pb-4 flex flex-col gap-3 border-t border-gray-100 dark:border-gray-700 pt-3">
+                    {week.map((day, di) => {
+                      if (!day || day.activity_type === 'rest') return null;
+                      const color = ACTIVITY_COLORS[day.activity_type];
+                      return (
+                        <div key={di} className="flex flex-col gap-1.5">
+                          <div className="flex items-center gap-2">
+                            <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
+                            <span className="text-xs font-medium text-gray-700 dark:text-gray-300">
+                              {['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][di]} — {ACTIVITY_LABELS[day.activity_type]}
+                            </span>
+                            {day.distance_value != null && (
+                              <span className="text-xs text-gray-400">{formatDistance(day.distance_value, settings.units)}</span>
+                            )}
+                            <div className="ml-auto">
+                              <EstimatedTimeBadge planDay={day} paceZones={settings.pace_zones} />
+                            </div>
+                          </div>
+                          {day.activity_type !== 'cross_training' && (
+                            <div className="ml-4">
+                              <WorkoutDisplay
+                                planDay={day}
+                                paceZones={settings.pace_zones}
+                                unit={settings.units}
+                                compact
+                              />
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </Card>
+            );
+          })}
+        </div>
 
         {/* Actions */}
         <div className="flex gap-2">
