@@ -34,6 +34,11 @@ export function formatShort(iso: string): string {
   return format(parseISO(iso), 'MMM d');
 }
 
+/** 'Nov 22 at 3:45 PM' */
+export function formatShortWithTime(iso: string): string {
+  return format(parseISO(iso), 'MMM d \'at\' h:mm a');
+}
+
 /** 'November 22, 2025' */
 export function formatLong(iso: string): string {
   return format(parseISO(iso), 'MMMM d, yyyy');

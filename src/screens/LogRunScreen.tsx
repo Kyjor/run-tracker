@@ -9,6 +9,7 @@ import { useToast } from '../contexts/ToastContext';
 import { usePlan } from '../contexts/PlanContext';
 import { createRun, getRunById, updateRun, deleteRun } from '../services/runService';
 import { publishFeedActivity } from '../services/socialService';
+import { syncToCloud } from '../services/syncService';
 import { useAuth } from '../contexts/AuthContext';
 
 export function LogRunScreen() {
@@ -58,6 +59,8 @@ export function LogRunScreen() {
       }
     }
     await refresh();
+    // Fire-and-forget sync — don't block navigation
+    if (session) syncToCloud(db).catch(() => {});
     navigate(-1);
   }
 
@@ -67,6 +70,7 @@ export function LogRunScreen() {
     await deleteRun(db, existingRun.id);
     await refresh();
     showToast('Run deleted', 'info');
+    if (session) syncToCloud(db).catch(() => {});
     navigate(-1);
   }
 

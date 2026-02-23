@@ -2,17 +2,16 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Header } from '../components/navigation/Header';
 import { Card, SectionHeader } from '../components/ui/Card';
-import { Toggle } from '../components/ui/Toggle';
 import { Select } from '../components/ui/Select';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
-import { ConfirmModal } from '../components/ui/Modal';
+import { Modal } from '../components/ui/Modal';
 import { Spinner } from '../components/ui/Spinner';
 import { useSettings } from '../contexts/SettingsContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useDb } from '../contexts/DatabaseContext';
 import { useToast } from '../contexts/ToastContext';
-import { syncToCloud } from '../services/syncService';
+import { forceSyncToCloud, pullFromCloud } from '../services/syncService';
 import { exportFullBackup, exportRunsCsv, restoreFromBackup, validateBackup } from '../services/backupService';
 import type { PaceZones, PaceZoneType } from '../types';
 import { PACE_ZONE_LABELS } from '../types';
@@ -29,6 +28,8 @@ export function SettingsScreen() {
   const [exporting, setExporting] = useState(false);
   const [restoring, setRestoring] = useState(false);
   const [clearModal, setClearModal] = useState(false);
+  const [clearConfirmText, setClearConfirmText] = useState('');
+  const [isClearing, setIsClearing] = useState(false);
 
   // ---------------------------------------------------------------------------
   // Sync
@@ -37,7 +38,9 @@ export function SettingsScreen() {
     if (!user) { showToast('Sign in to sync', 'info'); return; }
     setSyncing(true);
     try {
-      await syncToCloud(db);
+      // First push any local changes up, then pull remote changes down
+      await forceSyncToCloud(db);
+      await pullFromCloud(db);
       showToast('Sync complete ✓', 'success');
     } catch {
       showToast('Sync failed', 'error');
@@ -98,13 +101,26 @@ export function SettingsScreen() {
   }
 
   async function handleClearData() {
-    await db.execute('DELETE FROM runs');
-    await db.execute('DELETE FROM goals');
-    await db.execute('UPDATE active_plan SET is_active = 0');
-    await db.execute("DELETE FROM training_plans WHERE is_builtin = 0");
-    showToast('All local data cleared', 'info');
-    setClearModal(false);
-    navigate('/home', { replace: true });
+    if (clearConfirmText !== 'I want to clear my local data') {
+      showToast('Please type the confirmation phrase exactly', 'error');
+      return;
+    }
+    setIsClearing(true);
+    try {
+      await db.execute('DELETE FROM runs');
+      await db.execute('DELETE FROM goals');
+      await db.execute('UPDATE active_plan SET is_active = 0');
+      await db.execute("DELETE FROM training_plans WHERE is_builtin = 0");
+      showToast('All local data cleared', 'info');
+      setClearModal(false);
+      setClearConfirmText('');
+      navigate('/home', { replace: true });
+    } catch (error) {
+      console.error('Failed to clear data:', error);
+      showToast('Failed to clear data', 'error');
+    } finally {
+      setIsClearing(false);
+    }
   }
 
   return (
@@ -142,17 +158,9 @@ export function SettingsScreen() {
             {user ? (
               <>
                 <p className="text-sm text-gray-600 dark:text-gray-400">Signed in as <strong>{user.email}</strong></p>
-                <Toggle
-                  label="Sync Across Devices"
-                  description="Requires a premium subscription"
-                  checked={settings.sync_enabled}
-                  onChange={v => updateSettings({ sync_enabled: v })}
-                />
-                {settings.sync_enabled && (
-                  <Button variant="secondary" isLoading={syncing} onClick={handleSync}>
-                    {syncing ? 'Syncing…' : 'Sync Now'}
-                  </Button>
-                )}
+                <Button variant="secondary" isLoading={syncing} onClick={handleSync}>
+                  {syncing ? 'Syncing…' : 'Sync Now'}
+                </Button>
                 {settings.last_sync_at && (
                   <p className="text-xs text-gray-400">Last sync: {new Date(settings.last_sync_at).toLocaleString()}</p>
                 )}
@@ -242,14 +250,49 @@ export function SettingsScreen() {
         </div>
       </div>
 
-      <ConfirmModal
+      <Modal
         isOpen={clearModal}
-        onClose={() => setClearModal(false)}
-        onConfirm={handleClearData}
+        onClose={() => {
+          setClearModal(false);
+          setClearConfirmText('');
+        }}
         title="Clear All Data"
-        message="This will permanently delete all your local runs, goals, and custom plans. Export a backup first?"
-        confirmLabel="Clear Anyway"
-      />
+      >
+        <div className="flex flex-col gap-4">
+          <p className="text-sm text-gray-700 dark:text-gray-300">
+            This will permanently delete all your local runs, goals, and custom plans. Export a backup first?
+          </p>
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            To confirm, please type: <strong className="font-mono">I want to clear my local data</strong>
+          </p>
+          <Input
+            value={clearConfirmText}
+            onChange={e => setClearConfirmText(e.target.value)}
+            placeholder="I want to clear my local data"
+            className="font-mono text-sm"
+          />
+          <div className="flex flex-col gap-2 pt-2">
+            <Button
+              variant="danger"
+              onClick={handleClearData}
+              isLoading={isClearing}
+              disabled={clearConfirmText !== 'I want to clear my local data'}
+              className="w-full"
+            >
+              Clear All Data
+            </Button>
+            <button
+              className="text-gray-500 dark:text-gray-400 py-3 text-center"
+              onClick={() => {
+                setClearModal(false);
+                setClearConfirmText('');
+              }}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from './contexts/AuthContext';
+import { syncToCloud, pullFromCloud } from './services/syncService';
 
 // Providers
 import { DatabaseProvider, useDatabase } from './contexts/DatabaseContext';
@@ -30,6 +31,7 @@ import { SettingsScreen } from './screens/SettingsScreen';
 import { CommunityScreen } from './screens/CommunityScreen';
 import { SocialScreen } from './screens/SocialScreen';
 import { FindFriendsScreen } from './screens/FindFriendsScreen';
+import { FriendProfileScreen } from './screens/FriendProfileScreen';
 import { SharePlanScreen } from './screens/SharePlanScreen';
 import { CommunityPlanDetailScreen } from './screens/CommunityPlanDetailScreen';
 
@@ -39,10 +41,18 @@ import { CommunityPlanDetailScreen } from './screens/CommunityPlanDetailScreen';
 
 function AppShell() {
   const { isReady, error } = useDatabase();
+  const { db } = useDatabase();
   const { settings, isLoaded } = useSettings();
   const { user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+
+  // Auto-sync on startup when logged in
+  useEffect(() => {
+    if (!isReady || !db || !user) return;
+    pullFromCloud(db).catch(() => {});
+    syncToCloud(db).catch(() => {});
+  }, [isReady, db, user]);
 
   useEffect(() => {
     if (!isLoaded) return;
@@ -110,6 +120,7 @@ function AppShell() {
           {/* Social */}
           <Route path="/social" element={<SocialScreen />} />
           <Route path="/social/search" element={<FindFriendsScreen />} />
+          <Route path="/social/profile/:id" element={<FriendProfileScreen />} />
 
           {/* Community */}
           <Route path="/community" element={<CommunityScreen />} />

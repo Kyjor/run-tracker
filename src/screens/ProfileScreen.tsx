@@ -3,11 +3,17 @@ import { useNavigate } from 'react-router-dom';
 import { Header } from '../components/navigation/Header';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
+import { Input } from '../components/ui/Input';
+import { Toggle } from '../components/ui/Toggle';
+import { Modal } from '../components/ui/Modal';
 import { useAuth } from '../contexts/AuthContext';
 import { usePlan } from '../contexts/PlanContext';
 import { useSettings } from '../contexts/SettingsContext';
 import { useDb } from '../contexts/DatabaseContext';
+import { useToast } from '../contexts/ToastContext';
 import { getRunStats } from '../services/statsService';
+import { getMyProfile, updateProfile } from '../services/socialService';
+import type { Profile } from '../types';
 import { RACE_TYPE_LABELS } from '../types';
 import { formatDistance } from '../utils/paceUtils';
 
@@ -17,9 +23,17 @@ export function ProfileScreen() {
   const { activePlanDetails, activePlan } = usePlan();
   const { settings } = useSettings();
   const db = useDb();
+  const { showToast } = useToast();
   const [allTimeDistance, setAllTimeDistance] = useState(0);
   const [totalRuns, setTotalRuns] = useState(0);
   const [streak, setStreak] = useState(0);
+
+  // Profile editing
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editPublic, setEditPublic] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     getRunStats(db, settings.units).then(s => {
@@ -29,9 +43,38 @@ export function ProfileScreen() {
     });
   }, [db, settings.units]);
 
+  useEffect(() => {
+    if (user) {
+      getMyProfile().then(p => {
+        if (p) setProfile(p);
+      });
+    }
+  }, [user]);
+
+  function openEdit() {
+    setEditName(profile?.display_name ?? user?.user_metadata?.display_name ?? '');
+    setEditPublic(profile?.is_public ?? false);
+    setEditOpen(true);
+  }
+
+  async function handleSaveProfile() {
+    setSaving(true);
+    try {
+      await updateProfile({ display_name: editName.trim(), is_public: editPublic });
+      setProfile(prev => prev ? { ...prev, display_name: editName.trim(), is_public: editPublic } : prev);
+      showToast('Profile updated!', 'success');
+      setEditOpen(false);
+    } catch {
+      showToast('Failed to update profile', 'error');
+    } finally {
+      setSaving(false);
+    }
+  }
+
   const menuItems = [
     { icon: '📋', label: 'My Plans', path: '/profile/plans' },
     { icon: '🎯', label: 'Goals', path: '/profile/goals' },
+    { icon: '👤', label: 'View My Public Profile', path: user ? `/social/profile/${user.id}` : '/auth' },
     { icon: '👥', label: 'Friends', path: '/social' },
     { icon: '🌐', label: 'Community Plans', path: '/community' },
     { icon: '⚙️', label: 'Settings', path: '/settings' },
@@ -48,12 +91,25 @@ export function ProfileScreen() {
             <div className="w-14 h-14 bg-primary-100 dark:bg-primary-900/40 rounded-full flex items-center justify-center text-2xl">
               {user ? user.email?.[0].toUpperCase() : '🏃'}
             </div>
-            <div>
+            <div className="flex-1">
               <p className="font-bold text-gray-900 dark:text-white text-lg">
-                {user ? (user.user_metadata?.display_name ?? user.email) : 'Runner'}
+                {profile?.display_name ?? user?.user_metadata?.display_name ?? 'Runner'}
               </p>
               {user && <p className="text-sm text-gray-400">{user.email}</p>}
+              {profile && (
+                <p className="text-xs text-gray-400 mt-0.5">
+                  {profile.is_public ? '🌐 Public profile' : '🔒 Private profile'}
+                </p>
+              )}
             </div>
+            {user && (
+              <button
+                onClick={openEdit}
+                className="text-sm text-primary-500 font-medium px-2 py-1"
+              >
+                Edit
+              </button>
+            )}
           </div>
 
           {/* Stats row */}
@@ -119,6 +175,37 @@ export function ProfileScreen() {
           </div>
         )}
       </div>
+
+      {/* Edit Profile Modal */}
+      <Modal
+        isOpen={editOpen}
+        onClose={() => setEditOpen(false)}
+        title="Edit Profile"
+      >
+        <div className="flex flex-col gap-4">
+          <Input
+            label="Display Name"
+            value={editName}
+            onChange={e => setEditName(e.target.value)}
+            placeholder="Your name"
+          />
+          <div className="flex items-center justify-between py-1">
+            <div>
+              <p className="text-sm font-medium text-gray-800 dark:text-gray-100">Public Profile</p>
+              <p className="text-xs text-gray-400 mt-0.5">Others can find you in Friend Search</p>
+            </div>
+            <Toggle checked={editPublic} onChange={setEditPublic} />
+          </div>
+          <Button
+            className="w-full mt-2"
+            onClick={handleSaveProfile}
+            isLoading={saving}
+            disabled={!editName.trim()}
+          >
+            Save
+          </Button>
+        </div>
+      </Modal>
     </div>
   );
 }

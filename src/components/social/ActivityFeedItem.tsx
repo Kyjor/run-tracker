@@ -1,12 +1,15 @@
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import type { FeedItem } from '../../types';
 import { Card } from '../ui/Card';
-import { formatShort } from '../../utils/dateUtils';
+import { CommentModal } from './CommentModal';
+import { formatShortWithTime } from '../../utils/dateUtils';
 import { formatDistance, formatDuration } from '../../utils/paceUtils';
 
 interface ActivityFeedItemProps {
   item: FeedItem;
   onLike?: () => void;
-  onComment?: () => void;
+  onCommentAdded?: () => void;
 }
 
 const ACTIVITY_EMOJI: Record<string, string> = {
@@ -36,10 +39,16 @@ function buildMessage(item: FeedItem): string {
   }
 }
 
-export function ActivityFeedItem({ item, onLike, onComment }: ActivityFeedItemProps) {
+export function ActivityFeedItem({ item, onLike, onCommentAdded }: ActivityFeedItemProps) {
+  const navigate = useNavigate();
+  const [commentModalOpen, setCommentModalOpen] = useState(false);
   const emoji = ACTIVITY_EMOJI[item.activity_type] ?? '🏃';
   const message = buildMessage(item);
   const d = item.data as Record<string, unknown>;
+  const name = item.profile?.display_name ?? 'Someone';
+
+  // Extract just the name part from the message for clickable link
+  const messageWithoutName = message.replace(`${name} `, '');
 
   return (
     <Card padding={false}>
@@ -47,13 +56,28 @@ export function ActivityFeedItem({ item, onLike, onComment }: ActivityFeedItemPr
         <div className="flex items-start gap-3">
           <span className="text-2xl">{emoji}</span>
           <div className="flex-1">
-            <p className="text-sm text-gray-800 dark:text-gray-100">{message}</p>
+            <p className="text-sm text-gray-800 dark:text-gray-100">
+              {item.profile ? (
+                <>
+                  <button
+                    onClick={() => navigate(`/social/profile/${item.user_id}`)}
+                    className="font-semibold text-primary-600 dark:text-primary-400 hover:underline"
+                  >
+                    {name}
+                  </button>
+                  {' '}
+                  {messageWithoutName}
+                </>
+              ) : (
+                message
+              )}
+            </p>
             {item.activity_type === 'run_completed' && d.duration ? (
               <p className="text-xs text-gray-500 mt-0.5">
                 {formatDuration(d.duration as number)}
               </p>
             ) : null}
-            <p className="text-xs text-gray-400 mt-1">{formatShort(item.created_at)}</p>
+            <p className="text-xs text-gray-400 mt-1">{formatShortWithTime(item.created_at)}</p>
           </div>
         </div>
 
@@ -67,12 +91,25 @@ export function ActivityFeedItem({ item, onLike, onComment }: ActivityFeedItemPr
             <span>{item.user_has_liked ? '❤️' : '🤍'}</span>
             {item.likes_count ?? 0}
           </button>
-          <button onClick={onComment} className="flex items-center gap-1.5 text-xs text-gray-400">
+          <button
+            onClick={() => setCommentModalOpen(true)}
+            className="flex items-center gap-1.5 text-xs text-gray-400"
+          >
             <span>💬</span>
             {item.comments_count ?? 0}
           </button>
         </div>
       </div>
+
+      <CommentModal
+        isOpen={commentModalOpen}
+        onClose={() => setCommentModalOpen(false)}
+        activityId={item.id}
+        onCommentAdded={() => {
+          onCommentAdded?.();
+          // Refresh the item's comment count (would need to reload from parent)
+        }}
+      />
     </Card>
   );
 }
