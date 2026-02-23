@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
+import { useAuth } from './contexts/AuthContext';
 
 // Providers
 import { DatabaseProvider, useDatabase } from './contexts/DatabaseContext';
@@ -28,6 +29,9 @@ import { GoalsScreen } from './screens/GoalsScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
 import { CommunityScreen } from './screens/CommunityScreen';
 import { SocialScreen } from './screens/SocialScreen';
+import { FindFriendsScreen } from './screens/FindFriendsScreen';
+import { SharePlanScreen } from './screens/SharePlanScreen';
+import { CommunityPlanDetailScreen } from './screens/CommunityPlanDetailScreen';
 
 // ---------------------------------------------------------------------------
 // Gate: show splash until DB is ready, redirect to onboarding if needed
@@ -36,6 +40,7 @@ import { SocialScreen } from './screens/SocialScreen';
 function AppShell() {
   const { isReady, error } = useDatabase();
   const { settings, isLoaded } = useSettings();
+  const { user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -46,7 +51,11 @@ function AppShell() {
     if (!settings.onboarding_complete && !isOnboarding) {
       navigate('/onboarding', { replace: true });
     }
-  }, [isLoaded, settings.onboarding_complete, location.pathname]);
+    // If user is logged in and sitting on the auth screen, send them home
+    if (user && location.pathname.startsWith('/auth')) {
+      navigate('/home', { replace: true });
+    }
+  }, [isLoaded, settings.onboarding_complete, user, location.pathname]);
 
   if (!isReady || !isLoaded) {
     return (
@@ -100,9 +109,12 @@ function AppShell() {
 
           {/* Social */}
           <Route path="/social" element={<SocialScreen />} />
+          <Route path="/social/search" element={<FindFriendsScreen />} />
 
           {/* Community */}
           <Route path="/community" element={<CommunityScreen />} />
+          <Route path="/community/share" element={<SharePlanScreen />} />
+          <Route path="/community/:id" element={<CommunityPlanDetailScreen />} />
         </Routes>
       </div>
 

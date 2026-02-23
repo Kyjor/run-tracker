@@ -1,10 +1,13 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Header } from '../components/navigation/Header';
 import { Input } from '../components/ui/Input';
 import { Button } from '../components/ui/Button';
 import { useAuth } from '../contexts/AuthContext';
 
 export function AuthScreen() {
   const { signIn, signUp, error, clearError } = useAuth();
+  const navigate = useNavigate();
   const [mode, setMode] = useState<'signin' | 'signup'>('signin');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -19,18 +22,24 @@ export function AuthScreen() {
     try {
       if (mode === 'signin') {
         await signIn(email, password);
+        navigate('/home', { replace: true });
       } else {
         await signUp(email, password, displayName);
         setSuccess('Check your email to confirm your account!');
       }
+    } catch (err) {
+      console.error('Auth error:', err);
     } finally {
       setIsLoading(false);
     }
   }
 
   return (
-    <div className="min-h-screen bg-white dark:bg-gray-900 flex flex-col items-center justify-center px-6">
-      <div className="text-5xl mb-4">🏃</div>
+    <div className="flex flex-col flex-1 overflow-y-auto pb-24">
+      <Header title={mode === 'signin' ? 'Sign In' : 'Sign Up'} showBack />
+      
+      <div className="flex flex-col items-center justify-center px-6 pt-8 flex-1">
+        <div className="text-5xl mb-4">🏃</div>
       <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-1">
         {mode === 'signin' ? 'Welcome back' : 'Join Run With Friends'}
       </h1>
@@ -88,6 +97,7 @@ export function AuthScreen() {
       >
         {mode === 'signin' ? "Don't have an account? Sign up" : 'Already have an account? Sign in'}
       </button>
+      </div>
     </div>
   );
 }

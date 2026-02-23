@@ -1,6 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import type { Session, User } from '@supabase/supabase-js';
-import { supabase } from '../services/supabaseClient';
+import { supabase, isSupabaseConfigured } from '../services/supabaseClient';
 
 interface AuthContextValue {
   user: User | null;
@@ -31,12 +31,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // Restore persisted session
-    supabase.auth.getSession().then(({ data: { session: s } }) => {
-      setSession(s);
-      setUser(s?.user ?? null);
+    if (!isSupabaseConfigured) {
       setLoading(false);
-    });
+      return;
+    }
+
+    // Restore persisted session
+    supabase.auth.getSession()
+      .then(({ data: { session: s } }) => {
+        setSession(s);
+        setUser(s?.user ?? null);
+      })
+      .catch(e => console.warn('getSession failed:', e))
+      .finally(() => setLoading(false));
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, s) => {
       setSession(s);
@@ -48,16 +55,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signUp = useCallback(async (email: string, password: string, displayName: string) => {
     setError(null);
-    const { error: e } = await supabase.auth.signUp({
+    
+    if (!isSupabaseConfigured) {
+      const msg = 'Cloud features not configured — account creation unavailable.';
+      setError(msg);
+      throw new Error(msg);
+    }
+    
+    const { error: e, data } = await supabase.auth.signUp({
       email,
       password,
       options: { data: { display_name: displayName } },
     });
-    if (e) { setError(e.message); throw e; }
+    
+    if (e) {
+      console.error('Signup error:', e);
+      setError(e.message || 'Failed to create account. Check your Supabase configuration.');
+      throw e;
+    }
+    
+    // Note: Supabase may require email confirmation, so user might not be immediately signed in
+    console.log('Signup successful:', data);
   }, []);
 
   const signIn = useCallback(async (email: string, password: string) => {
     setError(null);
+    if (!isSupabaseConfigured) {
+      const msg = 'Cloud features not configured — sign in unavailable.';
+      setError(msg);
+      throw new Error(msg);
+    }
     const { error: e } = await supabase.auth.signInWithPassword({ email, password });
     if (e) { setError(e.message); throw e; }
   }, []);

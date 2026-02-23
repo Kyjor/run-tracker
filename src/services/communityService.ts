@@ -6,23 +6,25 @@ export async function getCommunityPlans(
 ): Promise<CommunityPlan[]> {
   let q = supabase
     .from('community_plans')
-    .select('*, profiles(*)');
+    .select('*');
 
   if (options.race_type) q = q.eq('race_type', options.race_type);
   if (options.sort === 'top') q = q.order('upvote_count', { ascending: false });
   else q = q.order('created_at', { ascending: false });
   q = q.limit(options.limit ?? 30);
 
-  const { data } = await q;
+  const { data, error } = await q;
+  if (error) console.error('getCommunityPlans error:', error);
   return (data ?? []) as CommunityPlan[];
 }
 
 export async function getCommunityPlan(id: string): Promise<CommunityPlan | null> {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('community_plans')
-    .select('*, profiles(*)')
+    .select('*')
     .eq('id', id)
     .single();
+  if (error) console.error('getCommunityPlan error:', error);
   return data as CommunityPlan | null;
 }
 
