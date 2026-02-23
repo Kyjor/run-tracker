@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Button } from '../ui/Button';
 import { isFollowing, followUser, unfollowUser } from '../../services/socialService';
 import { useAuth } from '../../contexts/AuthContext';

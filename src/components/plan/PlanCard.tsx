@@ -1,6 +1,5 @@
-import React from 'react';
 import type { TrainingPlan } from '../../types';
-import { RACE_TYPE_LABELS, RACE_TYPE_DISTANCES, DIFFICULTY_LABELS, ACTIVITY_COLORS } from '../../types';
+import { RACE_TYPE_LABELS, DIFFICULTY_LABELS, ACTIVITY_COLORS } from '../../types';
 import { Card } from '../ui/Card';
 import { Badge } from '../ui/Badge';
 

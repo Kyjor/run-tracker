@@ -58,7 +58,6 @@ export async function getRunStats(
   let current_streak = 0;
   let longest_streak = 0;
   let streak = 0;
-  const today = format(new Date(), 'yyyy-MM-dd');
   // check backwards from today
   for (let i = 0; i <= 365; i++) {
     const d = format(subDays(new Date(), i), 'yyyy-MM-dd');

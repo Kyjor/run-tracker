@@ -1,4 +1,3 @@
-import React from 'react';
 
 interface ProgressRingProps {
   value: number;    // 0-100

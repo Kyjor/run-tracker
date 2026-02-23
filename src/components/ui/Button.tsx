@@ -1,4 +1,3 @@
-import React from 'react';
 import { Spinner } from './Spinner';
 
 type Variant = 'primary' | 'secondary' | 'ghost' | 'danger';

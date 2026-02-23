@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { RaceType, PlanDay, DistanceUnit } from '../types';
 import { RACE_TYPE_LABELS, RACE_TYPE_DISTANCES, DIFFICULTY_LABELS } from '../types';

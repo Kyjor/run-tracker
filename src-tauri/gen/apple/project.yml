@@ -1,6 +1,6 @@
-name: homeplan
+name: run-with-friends
 options:
-  bundleIdPrefix: com.homeplan.app
+  bundleIdPrefix: com.runwithfriends.app
   deploymentTarget:
     iOS: 13.0
 fileGroups: [../../src]
@@ -10,8 +10,8 @@ configs:
 settingGroups:
   app:
     base:
-      PRODUCT_NAME: homeplan
-      PRODUCT_BUNDLE_IDENTIFIER: com.homeplan.app
+      PRODUCT_NAME: Run With Friends
+      PRODUCT_BUNDLE_IDENTIFIER: com.runwithfriends.app
       DEVELOPMENT_TEAM: AKG5NATH99
 targetTemplates:
   app:
@@ -25,20 +25,20 @@ targetTemplates:
     settings:
       groups: [app]
 targets:
-  homeplan_iOS:
+  run-with-friends_iOS:
     type: application
     platform: iOS
     sources:
       - path: Sources
       - path: Assets.xcassets
       - path: Externals
-      - path: homeplan_iOS
+      - path: run-with-friends_iOS
       - path: assets
         buildPhase: resources
         type: folder
       - path: LaunchScreen.storyboard
     info:
-      path: homeplan_iOS/Info.plist
+      path: run-with-friends_iOS/Info.plist
       properties:
         LSRequiresIPhoneOS: true
         UILaunchStoryboardName: LaunchScreen
@@ -55,7 +55,7 @@ targets:
         CFBundleShortVersionString: 0.1.0
         CFBundleVersion: 0.1.0
     entitlements:
-      path: homeplan_iOS/homeplan_iOS.entitlements
+      path: run-with-friends_iOS/run-with-friends_iOS.entitlements
     scheme:
       environmentVariables:
         RUST_BACKTRACE: full

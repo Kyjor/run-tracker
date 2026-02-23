@@ -1,4 +1,3 @@
-import React from 'react';
 import type { FeedItem } from '../../types';
 import { Card } from '../ui/Card';
 import { formatShort } from '../../utils/dateUtils';
@@ -49,11 +48,11 @@ export function ActivityFeedItem({ item, onLike, onComment }: ActivityFeedItemPr
           <span className="text-2xl">{emoji}</span>
           <div className="flex-1">
             <p className="text-sm text-gray-800 dark:text-gray-100">{message}</p>
-            {item.activity_type === 'run_completed' && d.duration && (
+            {item.activity_type === 'run_completed' && d.duration ? (
               <p className="text-xs text-gray-500 mt-0.5">
                 {formatDuration(d.duration as number)}
               </p>
-            )}
+            ) : null}
             <p className="text-xs text-gray-400 mt-1">{formatShort(item.created_at)}</p>
           </div>
         </div>

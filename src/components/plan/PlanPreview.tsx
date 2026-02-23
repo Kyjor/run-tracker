@@ -1,4 +1,3 @@
-import React from 'react';
 import type { PlanDay } from '../../types';
 import { ACTIVITY_COLORS, ACTIVITY_LABELS } from '../../types';
 

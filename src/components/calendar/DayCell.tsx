@@ -1,4 +1,3 @@
-import React from 'react';
 import type { PlanDay, Run } from '../../types';
 import { ACTIVITY_COLORS } from '../../types';
 import { formatDistance } from '../../utils/paceUtils';

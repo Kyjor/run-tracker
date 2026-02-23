@@ -172,18 +172,30 @@ export const PLAN_HM_BEG = buildPlan(
   12,
 );
 export const PLAN_HM_BEG_DAYS = buildDays(PLAN_HM_BEG_ID, [
-  [['easy_run', 3], ['cross_training', null, 30], ['easy_run', 3], ['rest'], ['easy_run', 3], ['easy_run', 4], ['rest']],
-  [['easy_run', 3], ['cross_training', null, 30], ['easy_run', 3.5], ['rest'], ['easy_run', 3], ['easy_run', 5], ['rest']],
-  [['easy_run', 3.5], ['cross_training', null, 30], ['easy_run', 4], ['rest'], ['easy_run', 3.5], ['easy_run', 6], ['rest']],
-  [['easy_run', 3], ['cross_training', null, 30], ['easy_run', 4], ['rest'], ['easy_run', 3], ['easy_run', 7], ['rest']],
-  [['easy_run', 3.5], ['cross_training', null, 30], ['easy_run', 4.5], ['rest'], ['easy_run', 3.5], ['easy_run', 8], ['rest']],
-  [['easy_run', 4], ['cross_training', null, 30], ['easy_run', 5], ['rest'], ['easy_run', 4], ['easy_run', 9], ['rest']],
-  [['easy_run', 4], ['cross_training', null, 30], ['easy_run', 4], ['rest'], ['easy_run', 4], ['easy_run', 7], ['rest']],
-  [['easy_run', 4.5], ['cross_training', null, 30], ['easy_run', 5.5], ['rest'], ['easy_run', 4.5], ['easy_run', 10], ['rest']],
-  [['easy_run', 5], ['cross_training', null, 30], ['easy_run', 6], ['rest'], ['easy_run', 5], ['easy_run', 11], ['rest']],
-  [['easy_run', 5], ['cross_training', null, 30], ['easy_run', 6], ['rest'], ['easy_run', 5], ['easy_run', 12], ['rest']],
-  [['easy_run', 4], ['cross_training', null, 30], ['easy_run', 4], ['rest'], ['easy_run', 3], ['easy_run', 8], ['rest']],
-  [['easy_run', 3], ['rest'], ['easy_run', 2], ['rest'], ['rest'], ['race', 13.1, null, 'Half Marathon Race Day!'], ['rest']],
+  // W1: Mon rest | Tue 3 | Wed 2 cross | Thu 3 | Fri rest | Sat 30 cross | Sun 4
+  [['rest'], ['easy_run', 3], ['cross_training', null, 30, '2 mi run or cross'], ['easy_run', 3], ['rest'], ['cross_training', null, 30], ['long_run', 4]],
+  // W2: same as W1
+  [['rest'], ['easy_run', 3], ['cross_training', null, 30, '2 mi run or cross'], ['easy_run', 3], ['rest'], ['cross_training', null, 30], ['long_run', 4]],
+  // W3
+  [['rest'], ['easy_run', 3.5], ['cross_training', null, 40, '2 mi run or cross'], ['easy_run', 3.5], ['rest'], ['cross_training', null, 40], ['long_run', 5]],
+  // W4: same as W3
+  [['rest'], ['easy_run', 3.5], ['cross_training', null, 40, '2 mi run or cross'], ['easy_run', 3.5], ['rest'], ['cross_training', null, 40], ['long_run', 5]],
+  // W5
+  [['rest'], ['easy_run', 4], ['cross_training', null, 40, '2 mi run or cross'], ['easy_run', 4], ['rest'], ['cross_training', null, 40], ['long_run', 6]],
+  // W6: 5K race Sunday
+  [['rest'], ['easy_run', 4], ['cross_training', null, 40, '2 mi run or cross'], ['easy_run', 4], ['easy_run', null, null, 'Rest or easy run'], ['rest'], ['race', 3.1, null, '5K Race']],
+  // W7
+  [['rest'], ['easy_run', 4.5], ['cross_training', null, 50, '3 mi run or cross'], ['easy_run', 4.5], ['rest'], ['cross_training', null, 50], ['long_run', 7]],
+  // W8
+  [['rest'], ['easy_run', 4.5], ['cross_training', null, 50, '3 mi run or cross'], ['easy_run', 4.5], ['rest'], ['cross_training', null, 50], ['long_run', 8]],
+  // W9: 10K race Sunday
+  [['rest'], ['easy_run', 5], ['cross_training', null, 50, '3 mi run or cross'], ['easy_run', 5], ['easy_run', null, null, 'Rest or easy run'], ['rest'], ['race', 6.2, null, '10K Race']],
+  // W10
+  [['rest'], ['easy_run', 5], ['cross_training', null, 60, '3 mi run or cross'], ['easy_run', 5], ['rest'], ['cross_training', null, 60], ['long_run', 9]],
+  // W11
+  [['rest'], ['easy_run', 5], ['cross_training', null, 60, '3 mi run or cross'], ['easy_run', 5], ['rest'], ['cross_training', null, 60], ['long_run', 10]],
+  // W12: taper + race Sunday
+  [['rest'], ['easy_run', 4], ['cross_training', null, 30, '3 mi run or cross'], ['easy_run', 2], ['rest'], ['rest'], ['race', 13.1, null, 'Half Marathon Race Day!']],
 ].map(w => w.map(d => d as DaySpec)));
 
 const PLAN_HM_INT_ID = 'builtin-hm-int';

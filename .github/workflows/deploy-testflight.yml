@@ -94,7 +94,7 @@ jobs:
         run: |
           BUILD_NUM=${{ github.run_number }}
           /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUM" \
-            src-tauri/gen/apple/Run\ With\ Friends/Info.plist || true
+            src-tauri/gen/apple/runwithfriends_iOS/Info.plist || true
           echo "BUILD_NUMBER=$BUILD_NUM" >> $GITHUB_ENV
 
       # -----------------------------------------------------------------------
@@ -109,16 +109,6 @@ jobs:
       # -----------------------------------------------------------------------
       # 9. Upload to TestFlight via App Store Connect API
       # -----------------------------------------------------------------------
-      - name: Upload to TestFlight
-        run: |
-          xcrun altool \
-            --upload-app \
-            --type ios \
-            --file "src-tauri/gen/apple/build/Run With Friends.ipa" \
-            --apiKey ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }} \
-            --apiIssuer ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
-        # The private key (.p8) must be placed at the expected path by the step below
-
       - name: Place App Store Connect API key
         env:
           APP_STORE_CONNECT_API_KEY_CONTENT: ${{ secrets.APP_STORE_CONNECT_API_KEY_CONTENT }}
@@ -126,6 +116,15 @@ jobs:
           mkdir -p ~/.appstoreconnect/private_keys
           echo "$APP_STORE_CONNECT_API_KEY_CONTENT" \
             > ~/.appstoreconnect/private_keys/AuthKey_${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}.p8
+
+      - name: Upload to TestFlight
+        run: |
+          xcrun altool \
+            --upload-app \
+            --type ios \
+            --file "src-tauri/gen/apple/build/runwithfriends.ipa" \
+            --apiKey ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }} \
+            --apiIssuer ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
 
       # -----------------------------------------------------------------------
       # 10. Notify on success/failure

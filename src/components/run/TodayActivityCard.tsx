@@ -1,4 +1,3 @@
-import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { TodayActivity } from '../../types';
 import { ACTIVITY_COLORS, ACTIVITY_LABELS } from '../../types';

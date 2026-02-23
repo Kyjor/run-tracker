@@ -1,4 +1,3 @@
-import React from 'react';
 import type { Run } from '../../types';
 import { RUN_TYPE_LABELS, ACTIVITY_COLORS } from '../../types';
 import { Card } from '../ui/Card';

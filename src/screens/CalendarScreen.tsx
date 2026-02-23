@@ -1,13 +1,13 @@
-import React, { useEffect, useState } from 'react';
+import { useState } from 'react';
 import type { PlanDay, Run } from '../types';
 import { Header } from '../components/navigation/Header';
 import { MonthView } from '../components/calendar/MonthView';
 import { DayDetailSheet } from '../components/calendar/DayDetailSheet';
 import { usePlan } from '../contexts/PlanContext';
 import { useDb } from '../contexts/DatabaseContext';
-import { getPlanDayForDate, getPlanDays } from '../services/planService';
+import { getPlanDays } from '../services/planService';
 import { getRunsForDate } from '../services/runService';
-import { today, planDayToDate } from '../utils/dateUtils';
+import { planDayToDate } from '../utils/dateUtils';
 import { ActivityLegend } from '../components/calendar/ActivityLegend';
 
 export function CalendarScreen() {

@@ -1,7 +1,6 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { CommunityPlan, RaceType } from '../types';
-import { RACE_TYPE_LABELS } from '../types';
+import type { CommunityPlan } from '../types';
 import { Header } from '../components/navigation/Header';
 import { CommunityPlanCard } from '../components/plan/CommunityPlanCard';
 import { EmptyState } from '../components/ui/EmptyState';

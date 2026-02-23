@@ -1,7 +1,6 @@
 import type Database from '@tauri-apps/plugin-sql';
 import type { FullBackup, TrainingPlan, PlanDay, Run, Goal, ActivePlan, PlanExportFormat } from '../types';
 import { loadSettings } from './settingsService';
-import { generateId } from '../utils/generateId';
 import { formatDuration, calcPaceSeconds, formatPace } from '../utils/paceUtils';
 
 const APP_VERSION = '0.1.0';

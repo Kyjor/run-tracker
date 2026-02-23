@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { format, subDays, subMonths, startOfMonth, endOfMonth } from 'date-fns';
+import { useEffect, useState } from 'react';
+import { format, subDays, startOfMonth, endOfMonth } from 'date-fns';
 import type { RunStats } from '../types';
 import { Header } from '../components/navigation/Header';
 import { Card, SectionHeader } from '../components/ui/Card';
@@ -9,7 +9,7 @@ import { Spinner } from '../components/ui/Spinner';
 import { useDb } from '../contexts/DatabaseContext';
 import { useSettings } from '../contexts/SettingsContext';
 import { getRunStats, getWeeklyMileage, getRunTypeBreakdown } from '../services/statsService';
-import { formatDistance, formatDuration, formatPace } from '../utils/paceUtils';
+import { formatDistance, formatPace } from '../utils/paceUtils';
 
 type Range = 'week' | 'month' | 'year' | 'all';
 

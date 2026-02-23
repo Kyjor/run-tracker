@@ -1,8 +1,8 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth } from 'date-fns';
-import type { GoalProgress, DistanceUnit, GoalType } from '../types';
+import type { GoalProgress, GoalType } from '../types';
 import { Header } from '../components/navigation/Header';
-import { Card, SectionHeader } from '../components/ui/Card';
+import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { ProgressRing } from '../components/ui/ProgressRing';
 import { ProgressBar } from '../components/ui/ProgressBar';

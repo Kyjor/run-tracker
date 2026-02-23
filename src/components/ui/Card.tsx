@@ -1,7 +1,7 @@
-import React from 'react';
+import type { ReactNode } from 'react';
 
 interface CardProps {
-  children: React.ReactNode;
+  children: ReactNode;
   className?: string;
   onClick?: () => void;
   padding?: boolean;
@@ -23,7 +23,7 @@ export function Card({ children, className = '', onClick, padding = true }: Card
   );
 }
 
-export function SectionHeader({ title, action }: { title: string; action?: React.ReactNode }) {
+export function SectionHeader({ title, action }: { title: string; action?: ReactNode }) {
   return (
     <div className="flex items-center justify-between px-1 mb-2">
       <h2 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">

@@ -63,7 +63,7 @@ export function formatMinutes(minutes: number): string {
 export function calcPaceSeconds(
   distanceValue: number,
   durationSeconds: number,
-  unit: DistanceUnit,
+  _unit: DistanceUnit,
 ): number {
   if (distanceValue <= 0 || durationSeconds <= 0) return 0;
   return durationSeconds / distanceValue;

@@ -4,7 +4,6 @@ import {
   addDays,
   startOfWeek,
   endOfWeek,
-  startOfMonth,
   endOfMonth,
   eachDayOfInterval,
   differenceInCalendarDays,

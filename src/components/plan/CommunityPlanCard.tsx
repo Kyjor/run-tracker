@@ -1,4 +1,3 @@
-import React from 'react';
 import type { CommunityPlan } from '../../types';
 import { RACE_TYPE_LABELS, DIFFICULTY_LABELS } from '../../types';
 import { Card } from '../ui/Card';

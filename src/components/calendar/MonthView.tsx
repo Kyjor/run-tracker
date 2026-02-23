@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { addMonths, subMonths, isSameDay, parseISO } from 'date-fns';
+import { useEffect, useMemo, useState } from 'react';
+import { addMonths, subMonths } from 'date-fns';
 import type { PlanDay, Run, ActivePlan, TrainingPlan } from '../../types';
 import { calendarGridDates, formatMonthYear, toISO, planDayToDate, isToday } from '../../utils/dateUtils';
 import { getPlanDays } from '../../services/planService';

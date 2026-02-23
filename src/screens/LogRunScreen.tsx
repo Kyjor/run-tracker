@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useLocation, useParams } from 'react-router-dom';
 import type { PlanDay, Run } from '../types';
 import { Header } from '../components/navigation/Header';
@@ -18,7 +18,7 @@ export function LogRunScreen() {
   const db = useDb();
   const { showToast } = useToast();
   const { refresh } = usePlan();
-  const { user, session } = useAuth();
+  const { session } = useAuth();
 
   const isEdit = !!params.id;
   const locationState = location.state as { date?: string; planDayId?: string; prefill?: PlanDay } | null;

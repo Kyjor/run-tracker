@@ -1,4 +1,3 @@
-import React from 'react';
 import { ACTIVITY_COLORS, ACTIVITY_LABELS } from '../../types';
 import type { ActivityType } from '../../types';
 

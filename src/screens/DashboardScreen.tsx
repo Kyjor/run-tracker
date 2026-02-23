@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { GoalProgress, RunStats } from '../types';
 import { Header } from '../components/navigation/Header';
@@ -23,7 +23,7 @@ export function DashboardScreen() {
   const navigate = useNavigate();
   const db = useDb();
   const { settings } = useSettings();
-  const { activePlan, activePlanDetails, todayActivity, weekNumber, dayOfWeek, isLoading } = usePlan();
+  const { todayActivity, weekNumber, dayOfWeek, isLoading } = usePlan();
 
   const [recentRuns, setRecentRuns] = useState<Run[]>([]);
   const [goalProgress, setGoalProgress] = useState<GoalProgress[]>([]);

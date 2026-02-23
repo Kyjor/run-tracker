@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useState } from 'react';
 import type { PlanDay, RunType, DistanceUnit } from '../../types';
 import { RUN_TYPE_LABELS } from '../../types';
 import { Input, Textarea } from '../ui/Input';

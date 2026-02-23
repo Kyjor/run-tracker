@@ -1,4 +1,3 @@
-import React from 'react';
 import { useToast, type ToastVariant } from '../../contexts/ToastContext';
 
 const ICON: Record<ToastVariant, string> = {
