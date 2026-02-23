@@ -92,6 +92,43 @@ CREATE INDEX IF NOT EXISTS idx_plan_days_plan  ON plan_days(plan_id, week_number
 const MIGRATIONS = [
   // v1 — add workout_segments to plan_days
   `ALTER TABLE plan_days ADD COLUMN workout_segments TEXT`,
+
+  // v2 — health metrics on runs (heart rate)
+  `ALTER TABLE runs ADD COLUMN avg_heart_rate REAL`,
+  `ALTER TABLE runs ADD COLUMN max_heart_rate REAL`,
+  `ALTER TABLE runs ADD COLUMN min_heart_rate REAL`,
+  `ALTER TABLE runs ADD COLUMN hr_zones TEXT`,
+
+  // v3 — cadence & form
+  `ALTER TABLE runs ADD COLUMN avg_cadence REAL`,
+  `ALTER TABLE runs ADD COLUMN avg_stride_length_meters REAL`,
+  `ALTER TABLE runs ADD COLUMN avg_ground_contact_time_ms REAL`,
+  `ALTER TABLE runs ADD COLUMN avg_vertical_oscillation_cm REAL`,
+
+  // v4 — power
+  `ALTER TABLE runs ADD COLUMN avg_power_watts REAL`,
+  `ALTER TABLE runs ADD COLUMN max_power_watts REAL`,
+
+  // v5 — elevation
+  `ALTER TABLE runs ADD COLUMN elevation_gain_meters REAL`,
+  `ALTER TABLE runs ADD COLUMN elevation_loss_meters REAL`,
+
+  // v6 — fitness & environment
+  `ALTER TABLE runs ADD COLUMN vo2_max REAL`,
+  `ALTER TABLE runs ADD COLUMN temperature_celsius REAL`,
+  `ALTER TABLE runs ADD COLUMN humidity_percent REAL`,
+  `ALTER TABLE runs ADD COLUMN weather_condition TEXT`,
+  `ALTER TABLE runs ADD COLUMN calories REAL`,
+  `ALTER TABLE runs ADD COLUMN has_route INTEGER NOT NULL DEFAULT 0`,
+
+  // v7 — GPS route table
+  `CREATE TABLE IF NOT EXISTS run_routes (
+    id         TEXT PRIMARY KEY,
+    run_id     TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+    points_json TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_run_routes_run ON run_routes(run_id)`,
 ];
 
 // ---------------------------------------------------------------------------

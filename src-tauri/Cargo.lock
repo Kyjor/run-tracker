@@ -2920,8 +2920,9 @@ dependencies = [
 
 [[package]]
 name = "run-with-friends"
-version = "0.2.2"
+version = "0.3.0"
 dependencies = [
+ "libc",
  "serde",
  "serde_json",
  "tauri",

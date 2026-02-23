@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { format } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
 import { Header } from '../components/navigation/Header';
 import { Card, SectionHeader } from '../components/ui/Card';
@@ -13,6 +14,8 @@ import { useDb } from '../contexts/DatabaseContext';
 import { useToast } from '../contexts/ToastContext';
 import { forceSyncToCloud, pullFromCloud } from '../services/syncService';
 import { exportFullBackup, exportRunsCsv, restoreFromBackup, validateBackup } from '../services/backupService';
+import { requestHealthKitPermission, fetchHealthKitWorkouts, workoutExists, importHealthKitWorkout } from '../services/healthkitService';
+import { parseISO } from 'date-fns';
 import type { PaceZones, PaceZoneType } from '../types';
 import { PACE_ZONE_LABELS } from '../types';
 import { formatPaceFromSeconds, parsePaceString } from '../utils/workoutUtils';
@@ -177,6 +180,21 @@ export function SettingsScreen() {
           </Card>
         </div>
 
+        {/* Heart Rate & Fitness */}
+        <div>
+          <SectionHeader title="Heart Rate & Fitness" />
+          <Card className="flex flex-col gap-3">
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              Used to calculate HR zones when importing Apple Health workouts.
+              Estimate: 220 − your age.
+            </p>
+            <MaxHRInput
+              value={settings.max_heart_rate_bpm}
+              onChange={bpm => updateSettings({ max_heart_rate_bpm: bpm })}
+            />
+          </Card>
+        </div>
+
         {/* Pace Zones */}
         <div>
           <SectionHeader title="Pace Zones" />
@@ -187,15 +205,10 @@ export function SettingsScreen() {
           />
         </div>
 
-        {/* Apple Health (TODO) */}
+        {/* Apple Health */}
         <div>
           <SectionHeader title="Apple Health" />
-          <Card>
-            <p className="text-sm text-gray-500 dark:text-gray-400">
-              🍎 Apple Health integration coming soon — runs will sync automatically.
-            </p>
-            {/* TODO: Implement HealthKit integration via Rust backend */}
-          </Card>
+          <HealthKitSection />
         </div>
 
         {/* Data & Backups */}
@@ -298,6 +311,39 @@ export function SettingsScreen() {
 }
 
 // ---------------------------------------------------------------------------
+// Max HR input
+// ---------------------------------------------------------------------------
+
+function MaxHRInput({ value, onChange }: { value: number; onChange: (v: number) => void }) {
+  const [draft, setDraft] = useState(String(value));
+
+  function commit() {
+    const n = parseInt(draft, 10);
+    if (!isNaN(n) && n >= 100 && n <= 230) {
+      onChange(n);
+    } else {
+      setDraft(String(value)); // reset
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-3">
+      <label className="text-sm text-gray-700 dark:text-gray-300 flex-1">Max Heart Rate</label>
+      <div className="flex items-center gap-1">
+        <Input
+          value={draft}
+          onChange={e => setDraft(e.target.value)}
+          onBlur={commit}
+          className="w-20 text-center font-mono"
+          inputMode="numeric"
+        />
+        <span className="text-sm text-gray-400">bpm</span>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Pace Zones Editor
 // ---------------------------------------------------------------------------
 
@@ -354,6 +400,233 @@ function PaceZonesEditor({
         ))}
       </div>
     </Card>
+  );
+}
+
+function HealthKitSection() {
+  const db = useDb();
+  const { settings } = useSettings();
+  const { showToast } = useToast();
+  const [hasPermission, setHasPermission] = useState<boolean | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [workouts, setWorkouts] = useState<any[]>([]);
+  const [importDateRange, setImportDateRange] = useState<'30' | '90' | 'all'>('30');
+  const [importingIds, setImportingIds] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    checkPermission();
+  }, []);
+
+  async function checkPermission() {
+    try {
+      const granted = await requestHealthKitPermission();
+      setHasPermission(granted);
+      if (granted) {
+        loadWorkouts();
+      }
+    } catch (error) {
+      console.error('Failed to check HealthKit permission:', error);
+      setHasPermission(false);
+    }
+  }
+
+  async function handleRequestPermission() {
+    const granted = await requestHealthKitPermission();
+    setHasPermission(granted);
+    if (granted) {
+      showToast('HealthKit permission granted!', 'success');
+      loadWorkouts();
+    } else {
+      showToast('HealthKit permission denied', 'error');
+    }
+  }
+
+  async function loadWorkouts() {
+    if (!db) return;
+    setLoading(true);
+    try {
+      const endDate = new Date();
+      let startDate: Date | undefined;
+      
+      if (importDateRange === '30') {
+        startDate = new Date();
+        startDate.setDate(startDate.getDate() - 30);
+      } else if (importDateRange === '90') {
+        startDate = new Date();
+        startDate.setDate(startDate.getDate() - 90);
+      }
+      
+      const startDateStr = startDate ? format(startDate, 'yyyy-MM-dd') : undefined;
+      const endDateStr = format(endDate, 'yyyy-MM-dd');
+      
+      const fetchedWorkouts = await fetchHealthKitWorkouts(startDateStr, endDateStr);
+      
+      // Check which ones already exist
+      const workoutsWithStatus = await Promise.all(
+        fetchedWorkouts.map(async (workout) => {
+          const exists = await workoutExists(db, workout, settings.units);
+          return { ...workout, alreadyImported: exists };
+        })
+      );
+      
+      setWorkouts(workoutsWithStatus);
+    } catch (error) {
+      console.error('Failed to load workouts:', error);
+      showToast('Failed to load workouts', 'error');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleImportWorkout(workout: any) {
+    if (!db) return;
+    setImportingIds(prev => new Set(prev).add(workout.id));
+    try {
+      const result = await importHealthKitWorkout(db, workout, settings.units, settings.max_heart_rate_bpm);
+      
+      if (result.success) {
+        showToast('Workout imported!', 'success');
+        // Update workout status
+        setWorkouts(prev => prev.map(w => 
+          w.id === workout.id ? { ...w, alreadyImported: true } : w
+        ));
+      } else {
+        showToast(result.error || 'Failed to import workout', 'error');
+      }
+    } catch (error) {
+      console.error('Import failed:', error);
+      showToast('Failed to import workout', 'error');
+    } finally {
+      setImportingIds(prev => {
+        const next = new Set(prev);
+        next.delete(workout.id);
+        return next;
+      });
+    }
+  }
+
+  return (
+    <Card className="flex flex-col gap-4">
+      {hasPermission === null ? (
+        <div className="flex items-center justify-center py-4">
+          <Spinner size="sm" className="text-primary-500" />
+        </div>
+      ) : hasPermission ? (
+        <>
+          <div>
+            <p className="text-sm text-gray-700 dark:text-gray-300 mb-2">Workouts from Apple Health</p>
+            <Select
+              label="Date Range"
+              options={[
+                { value: '30', label: 'Last 30 days' },
+                { value: '90', label: 'Last 90 days' },
+                { value: 'all', label: 'All time' },
+              ]}
+              value={importDateRange}
+              onChange={e => {
+                setImportDateRange(e.target.value as '30' | '90' | 'all');
+                loadWorkouts();
+              }}
+            />
+          </div>
+          
+          {loading ? (
+            <div className="flex items-center justify-center py-8">
+              <Spinner size="sm" className="text-primary-500" />
+            </div>
+          ) : workouts.length === 0 ? (
+            <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-4">
+              No workouts found in selected date range
+            </p>
+          ) : (
+            <div className="flex flex-col gap-2 max-h-[400px] overflow-y-auto">
+              {workouts.map(workout => (
+                <WorkoutListItem
+                  key={workout.id}
+                  workout={workout}
+                  units={settings.units}
+                  alreadyImported={workout.alreadyImported}
+                  isImporting={importingIds.has(workout.id)}
+                  onImport={() => handleImportWorkout(workout)}
+                />
+              ))}
+            </div>
+          )}
+        </>
+      ) : (
+        <>
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            Grant access to Apple Health to view and import your workouts.
+          </p>
+          <Button onClick={handleRequestPermission}>
+            Request HealthKit Permission
+          </Button>
+        </>
+      )}
+    </Card>
+  );
+}
+
+function WorkoutListItem({ 
+  workout, 
+  units, 
+  alreadyImported, 
+  isImporting, 
+  onImport 
+}: { 
+  workout: any; 
+  units: 'mi' | 'km'; 
+  alreadyImported: boolean; 
+  isImporting: boolean; 
+  onImport: () => void;
+}) {
+  const distanceValue = units === 'mi' 
+    ? (workout.distance_meters ?? 0) / 1609.34
+    : (workout.distance_meters ?? 0) / 1000;
+  
+  const distanceStr = distanceValue > 0 
+    ? `${distanceValue.toFixed(2)} ${units}`
+    : 'No distance';
+  
+  const durationMinutes = Math.floor(workout.duration_seconds / 60);
+  const durationSeconds = Math.floor(workout.duration_seconds % 60);
+  const durationStr = `${durationMinutes}:${durationSeconds.toString().padStart(2, '0')}`;
+  
+  const runDate = format(parseISO(workout.start_date), 'MMM d, yyyy');
+  
+  return (
+    <div className="flex items-center gap-3 p-3 rounded-xl bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 mb-1">
+          <span className="text-sm font-semibold text-gray-900 dark:text-white">
+            {runDate}
+          </span>
+          {alreadyImported && (
+            <span className="text-xs text-green-600 dark:text-green-400">✓ Imported</span>
+          )}
+        </div>
+        <div className="flex gap-3 text-xs text-gray-600 dark:text-gray-400">
+          <span>{distanceStr}</span>
+          <span>•</span>
+          <span>{durationStr}</span>
+          {workout.average_heart_rate && (
+            <>
+              <span>•</span>
+              <span>HR: {Math.round(workout.average_heart_rate)}</span>
+            </>
+          )}
+        </div>
+      </div>
+      <Button
+        size="sm"
+        variant={alreadyImported ? "ghost" : "secondary"}
+        onClick={onImport}
+        disabled={alreadyImported || isImporting}
+        isLoading={isImporting}
+      >
+        {alreadyImported ? 'Imported' : 'Import'}
+      </Button>
+    </div>
   );
 }
 

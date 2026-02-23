@@ -4,7 +4,7 @@ import type { FeedItem } from '../../types';
 import { Card } from '../ui/Card';
 import { CommentModal } from './CommentModal';
 import { formatShortWithTime } from '../../utils/dateUtils';
-import { parseISO, format } from 'date-fns';
+import { parseISO } from 'date-fns';
 import { formatDistance, formatDuration } from '../../utils/paceUtils';
 
 interface ActivityFeedItemProps {

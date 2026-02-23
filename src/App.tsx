@@ -34,6 +34,7 @@ import { FindFriendsScreen } from './screens/FindFriendsScreen';
 import { FriendProfileScreen } from './screens/FriendProfileScreen';
 import { SharePlanScreen } from './screens/SharePlanScreen';
 import { CommunityPlanDetailScreen } from './screens/CommunityPlanDetailScreen';
+import { RunDetailScreen } from './screens/RunDetailScreen';
 
 // ---------------------------------------------------------------------------
 // Gate: show splash until DB is ready, redirect to onboarding if needed
@@ -107,6 +108,7 @@ function AppShell() {
           <Route path="/calendar" element={<CalendarScreen />} />
           <Route path="/log" element={<LogRunScreen />} />
           <Route path="/log/edit/:id" element={<LogRunScreen />} />
+          <Route path="/runs/:id" element={<RunDetailScreen />} />
           <Route path="/stats" element={<StatsScreen />} />
           <Route path="/profile" element={<ProfileScreen />} />
 

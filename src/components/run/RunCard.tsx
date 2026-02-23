@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import type { Run } from '../../types';
 import { RUN_TYPE_LABELS, ACTIVITY_COLORS } from '../../types';
 import { Card } from '../ui/Card';
@@ -14,6 +15,7 @@ interface RunCardProps {
 }
 
 export function RunCard({ run, onClick }: RunCardProps) {
+  const navigate = useNavigate();
   const { user } = useAuth();
   const [commentModalOpen, setCommentModalOpen] = useState(false);
   const [activityId, setActivityId] = useState<string | null>(null);
@@ -45,9 +47,19 @@ export function RunCard({ run, onClick }: RunCardProps) {
     }
   }
 
+  function handleCardClick() {
+    if (onClick) { onClick(); return; }
+    navigate(`/runs/${run.id}`);
+  }
+
+  // Show HR badge if data is available
+  const hrBadge = run.avg_heart_rate != null
+    ? `❤️ ${Math.round(run.avg_heart_rate)} bpm`
+    : null;
+
   return (
     <>
-      <Card onClick={onClick} padding={false}>
+      <Card onClick={handleCardClick} padding={false}>
         <div className="flex items-center gap-3 p-4">
           {/* Color indicator */}
           <div
@@ -73,9 +85,20 @@ export function RunCard({ run, onClick }: RunCardProps) {
                 <span className="text-xs text-gray-400">{formatPace(pace, run.distance_unit)}</span>
               )}
             </div>
-            {run.notes ? (
-              <p className="text-xs text-gray-400 mt-0.5 truncate">{run.notes}</p>
-            ) : null}
+            <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+              {hrBadge && (
+                <span className="text-xs text-red-400 dark:text-red-300">{hrBadge}</span>
+              )}
+              {run.elevation_gain_meters != null && run.elevation_gain_meters > 0 && (
+                <span className="text-xs text-gray-400">↑{Math.round(run.elevation_gain_meters)}m</span>
+              )}
+              {run.avg_cadence != null && (
+                <span className="text-xs text-gray-400">{Math.round(run.avg_cadence)} spm</span>
+              )}
+              {run.notes ? (
+                <span className="text-xs text-gray-400 truncate">{run.notes}</span>
+              ) : null}
+            </div>
           </div>
 
           <div className="flex items-center gap-2 flex-shrink-0">

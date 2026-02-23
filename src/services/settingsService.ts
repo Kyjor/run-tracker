@@ -22,6 +22,8 @@ export async function loadSettings(db: Database): Promise<AppSettings> {
     pace_zones = units === 'km' ? DEFAULT_PACE_ZONES_KM : DEFAULT_PACE_ZONES_MI;
   }
 
+  const maxHR = map['max_heart_rate_bpm'] ? parseInt(map['max_heart_rate_bpm'], 10) : DEFAULT_APP_SETTINGS.max_heart_rate_bpm;
+
   return {
     units,
     dark_mode: (map['dark_mode'] as DarkModePreference) ?? DEFAULT_APP_SETTINGS.dark_mode,
@@ -29,6 +31,7 @@ export async function loadSettings(db: Database): Promise<AppSettings> {
     sync_enabled: map['sync_enabled'] === 'true',
     last_sync_at: map['last_sync_at'] ?? '',
     pace_zones,
+    max_heart_rate_bpm: isNaN(maxHR) ? DEFAULT_APP_SETTINGS.max_heart_rate_bpm : maxHR,
   };
 }
 

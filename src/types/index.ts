@@ -124,6 +124,27 @@ export interface ActivePlan {
   sync_status: SyncStatus;
 }
 
+// ============================================================
+// Health Metrics
+// ============================================================
+
+/** Time (seconds) spent in each HR zone during a run. */
+export interface HRZones {
+  z1_seconds: number; // Recovery  < 60% maxHR
+  z2_seconds: number; // Easy      60-70%
+  z3_seconds: number; // Aerobic   70-80%
+  z4_seconds: number; // Threshold 80-90%
+  z5_seconds: number; // Max       > 90%
+}
+
+/** A single GPS point in a run route. */
+export interface RoutePoint {
+  lat: number;
+  lng: number;
+  alt?: number;   // metres
+  t?: number;     // unix ms timestamp
+}
+
 export interface Run {
   id: string;
   date: string; // YYYY-MM-DD
@@ -134,6 +155,52 @@ export interface Run {
   plan_day_id: string | null;
   notes: string;
   source: 'manual' | 'healthkit';
+
+  // ── Heart Rate ──────────────────────────────────────────
+  avg_heart_rate: number | null;
+  max_heart_rate: number | null;
+  min_heart_rate: number | null;
+  /** JSON-encoded HRZones */
+  hr_zones: string | null;
+
+  // ── Cadence & Running Form ───────────────────────────────
+  /** Steps per minute */
+  avg_cadence: number | null;
+  /** Metres */
+  avg_stride_length_meters: number | null;
+  /** Milliseconds */
+  avg_ground_contact_time_ms: number | null;
+  /** Centimetres */
+  avg_vertical_oscillation_cm: number | null;
+
+  // ── Power ────────────────────────────────────────────────
+  /** Watts */
+  avg_power_watts: number | null;
+  max_power_watts: number | null;
+
+  // ── Elevation ────────────────────────────────────────────
+  /** Metres gained */
+  elevation_gain_meters: number | null;
+  /** Metres lost */
+  elevation_loss_meters: number | null;
+
+  // ── Fitness ──────────────────────────────────────────────
+  /** mL/kg/min snapshot from Apple Watch */
+  vo2_max: number | null;
+
+  // ── Environment ──────────────────────────────────────────
+  temperature_celsius: number | null;
+  humidity_percent: number | null;
+  /** 'clear' | 'cloudy' | 'foggy' | 'windy' | 'rain' | 'snow' */
+  weather_condition: string | null;
+
+  // ── Calories ─────────────────────────────────────────────
+  calories: number | null;
+
+  // ── Route ────────────────────────────────────────────────
+  /** 1 if GPS route data exists in run_routes table */
+  has_route: number;
+
   created_at: string;
   updated_at: string;
   sync_status: SyncStatus;
@@ -170,6 +237,8 @@ export interface AppSettings {
   sync_enabled: boolean;
   last_sync_at: string;
   pace_zones: PaceZones;
+  /** User's maximum heart rate in bpm, used for HR zone calculations. Default 190. */
+  max_heart_rate_bpm: number;
 }
 
 export const DEFAULT_APP_SETTINGS: AppSettings = {
@@ -179,6 +248,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   sync_enabled: false,
   last_sync_at: '',
   pace_zones: DEFAULT_PACE_ZONES_MI,
+  max_heart_rate_bpm: 190,
 };
 
 // ============================================================
