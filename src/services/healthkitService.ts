@@ -5,6 +5,46 @@ import type Database from '@tauri-apps/plugin-sql';
 import { format, parseISO } from 'date-fns';
 import { generateId } from '../utils/generateId';
 
+const HEALTHKIT_DEBUG_KEY = 'healthkit_debug_logs';
+const HEALTHKIT_DEBUG_MAX = 300;
+
+export interface HealthKitDebugLog {
+  ts: string;
+  level: 'info' | 'error';
+  message: string;
+}
+
+function appendHealthKitDebug(level: 'info' | 'error', message: string): void {
+  const entry: HealthKitDebugLog = { ts: new Date().toISOString(), level, message };
+  if (level === 'error') console.error(`[HealthKit] ${message}`);
+  else console.log(`[HealthKit] ${message}`);
+  try {
+    const raw = localStorage.getItem(HEALTHKIT_DEBUG_KEY);
+    const prev = raw ? (JSON.parse(raw) as HealthKitDebugLog[]) : [];
+    const next = [...prev, entry].slice(-HEALTHKIT_DEBUG_MAX);
+    localStorage.setItem(HEALTHKIT_DEBUG_KEY, JSON.stringify(next));
+  } catch {
+    // no-op for environments without localStorage
+  }
+}
+
+export function getHealthKitDebugLogs(): HealthKitDebugLog[] {
+  try {
+    const raw = localStorage.getItem(HEALTHKIT_DEBUG_KEY);
+    return raw ? (JSON.parse(raw) as HealthKitDebugLog[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function clearHealthKitDebugLogs(): void {
+  try {
+    localStorage.removeItem(HEALTHKIT_DEBUG_KEY);
+  } catch {
+    // no-op
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -62,8 +102,12 @@ export interface WorkoutDetails {
 
 export async function requestHealthKitPermission(): Promise<boolean> {
   try {
-    return await invoke<boolean>('request_healthkit_permission');
+    appendHealthKitDebug('info', 'Requesting HealthKit permission');
+    const granted = await invoke<boolean>('request_healthkit_permission');
+    appendHealthKitDebug('info', `HealthKit permission result: ${granted ? 'granted' : 'denied'}`);
+    return granted;
   } catch {
+    appendHealthKitDebug('error', 'Permission request failed');
     return false;
   }
 }
@@ -72,13 +116,26 @@ export async function fetchHealthKitWorkouts(
   startDate?: string,
   endDate?: string,
 ): Promise<HealthKitWorkout[]> {
-  return invoke<HealthKitWorkout[]>('fetch_healthkit_workouts', { startDate, endDate });
+  try {
+    appendHealthKitDebug('info', `Fetching workouts start=${startDate ?? 'none'} end=${endDate ?? 'none'}`);
+    const result = await invoke<HealthKitWorkout[]>('fetch_healthkit_workouts', { startDate, endDate });
+    appendHealthKitDebug('info', `Fetched ${result.length} workouts`);
+    return result;
+  } catch (error) {
+    appendHealthKitDebug('error', `Error fetching workouts: ${error instanceof Error ? error.message : String(error)}`);
+    // If error is about authorization, provide helpful message
+    if (error instanceof Error && error.message.includes('authorization')) {
+      throw new Error('HealthKit permission not granted. Please grant read access to workouts in Settings > Privacy & Security > Health.');
+    }
+    throw error;
+  }
 }
 
 export async function fetchWorkoutDetails(
   workoutId: string,
   maxHeartRateBpm = 190,
 ): Promise<WorkoutDetails> {
+  appendHealthKitDebug('info', `Fetching workout details for ${workoutId}`);
   return invoke<WorkoutDetails>('fetch_workout_details', {
     workoutId,
     maxHeartRateBpm,
@@ -152,10 +209,13 @@ export async function importHealthKitWorkout(
   maxHeartRateBpm = 190,
 ): Promise<{ success: boolean; error?: string }> {
   try {
+    appendHealthKitDebug('info', `Import requested for workout ${workout.id} (${workout.activity_type})`);
     if (!workout.distance_meters) {
+      appendHealthKitDebug('error', `Import failed for ${workout.id}: no distance data`);
       return { success: false, error: 'Workout has no distance data' };
     }
     if (await workoutExists(db, workout, units)) {
+      appendHealthKitDebug('info', `Skipped import for ${workout.id}: already imported`);
       return { success: false, error: 'Workout already imported' };
     }
 
@@ -176,7 +236,7 @@ export async function importHealthKitWorkout(
 
     await createRun(db, {
       id: workout.id,
-      date: format(parseISO(workout.start_date), 'yyyy-MM-dd'),
+      date: workout.start_date, // HealthKit provides ISO 8601 datetime
       distance_value: Math.round(distanceValue * 100) / 100,
       distance_unit: units,
       duration_seconds: Math.round(workout.duration_seconds),
@@ -229,9 +289,10 @@ export async function importHealthKitWorkout(
       );
     }
 
+    appendHealthKitDebug('info', `Import successful for ${workout.id}`);
     return { success: true };
   } catch (error) {
-    console.error('importHealthKitWorkout failed:', error);
+    appendHealthKitDebug('error', `Import failed for ${workout.id}: ${error instanceof Error ? error.message : String(error)}`);
     return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
   }
 }

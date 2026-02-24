@@ -114,13 +114,19 @@ public func fetchHealthKitWorkouts(
     resultPtr: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>?,
     resultLen: UnsafeMutablePointer<Int>?
 ) -> Int32 {
-    guard HKHealthStore.isHealthDataAvailable() else { return -1 }
+    guard HKHealthStore.isHealthDataAvailable() else {
+        print("[HealthKit] Health data not available")
+        return -1
+    }
 
     let startDate = startDateStr.flatMap { iso8601.date(from: String(cString: $0)) }
-        ?? Calendar.current.date(byAdding: .day, value: -30, to: Date())!
     let endDate = endDateStr.flatMap { iso8601.date(from: String(cString: $0)) } ?? Date()
 
-    let predicate = HKQuery.predicateForSamples(withStart: startDate, end: endDate, options: .strictStartDate)
+    print("[HealthKit] Fetching workouts from \(String(describing: startDate)) to \(endDate)")
+
+    // Fetch all workouts from HealthKit (no type/date predicate), then
+    // apply date-range filtering in-memory.
+    let predicate: NSPredicate? = nil
     let sort = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: false)
 
     let lock = NSLock()
@@ -134,48 +140,64 @@ public func fetchHealthKitWorkouts(
         limit: HKObjectQueryNoLimit,
         sortDescriptors: [sort]
     ) { _, samples, error in
-        defer { semaphore.signal() }
-        guard let workouts = samples as? [HKWorkout], error == nil else {
-            lock.lock(); queryError = error; lock.unlock(); return
-        }
-
-        let group = DispatchGroup()
-        var items: [HKWorkoutJSON] = []
-        let lock = NSLock()
-
-        for workout in workouts {
-            guard workout.workoutActivityType == .running ||
-                  workout.workoutActivityType == .walking ||
-                  workout.workoutActivityType == .hiking else { continue }
-
-            group.enter()
-            fetchBasicHR(workout: workout) { avgHR, maxHR in
-                let weather = extractWeather(from: workout)
-                let item = HKWorkoutJSON(
-                    id: workout.uuid.uuidString,
-                    activity_type: activityTypeName(workout.workoutActivityType),
-                    start_date: iso8601.string(from: workout.startDate),
-                    end_date: iso8601.string(from: workout.endDate),
-                    duration_seconds: workout.duration,
-                    distance_meters: workout.totalDistance?.doubleValue(for: .meter()),
-                    energy_burned_kcal: workout.totalEnergyBurned?.doubleValue(for: .kilocalorie()),
-                    average_heart_rate: avgHR,
-                    max_heart_rate: maxHR,
-                    temperature_celsius: weather.temperature,
-                    humidity_percent: weather.humidity,
-                    weather_condition: weather.condition
-                )
-                lock.lock(); items.append(item); lock.unlock()
-                group.leave()
-            }
-        }
-
-        group.notify(queue: .global()) {
-            // Sort by start_date desc to restore order after parallel fetching
-            lock.lock(); results = items.sorted { $0.start_date > $1.start_date }; lock.unlock()
+        if let error = error {
+            print("[HealthKit] Query error: \(error.localizedDescription)")
+            lock.lock(); queryError = error; lock.unlock()
             semaphore.signal()
+            return
         }
-        // Override the outer semaphore.signal() from defer — only signal once via group
+        guard let workouts = samples as? [HKWorkout] else {
+            print("[HealthKit] No workouts returned or invalid type")
+            lock.lock(); queryError = NSError(domain: "HealthKit", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid workout samples"]); lock.unlock()
+            semaphore.signal()
+            return
+        }
+        
+        print("[HealthKit] Found \(workouts.count) total workouts")
+
+        let workoutsInRange = workouts.filter { w in
+            let afterStart = startDate.map { w.startDate >= $0 } ?? true
+            let beforeEnd = w.startDate <= endDate
+            return afterStart && beforeEnd
+        }
+        print("[HealthKit] Date-range filtered to \(workoutsInRange.count) workouts")
+
+        // Include all workout activity types.
+        print("[HealthKit] Including all \(workoutsInRange.count) workout activity types")
+
+        if workoutsInRange.isEmpty {
+            lock.lock(); results = []; lock.unlock()
+            semaphore.signal()
+            return
+        }
+
+        // Keep list-query lightweight and deterministic. Detailed metrics are
+        // fetched later by fetch_workout_details at import time.
+        var items: [HKWorkoutJSON] = []
+        items.reserveCapacity(workoutsInRange.count)
+        for workout in workoutsInRange {
+            let weather = extractWeather(from: workout)
+            items.append(HKWorkoutJSON(
+                id: workout.uuid.uuidString,
+                activity_type: activityTypeName(workout.workoutActivityType),
+                start_date: iso8601.string(from: workout.startDate),
+                end_date: iso8601.string(from: workout.endDate),
+                duration_seconds: workout.duration,
+                distance_meters: workout.totalDistance?.doubleValue(for: .meter()),
+                energy_burned_kcal: workout.totalEnergyBurned?.doubleValue(for: .kilocalorie()),
+                average_heart_rate: nil,
+                max_heart_rate: nil,
+                temperature_celsius: weather.temperature,
+                humidity_percent: weather.humidity,
+                weather_condition: weather.condition
+            ))
+        }
+
+        lock.lock()
+        results = items.sorted { $0.start_date > $1.start_date }
+        lock.unlock()
+        print("[HealthKit] Successfully processed \(results.count) workouts")
+        semaphore.signal()
         return
     }
 

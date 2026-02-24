@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { addMonths, subMonths } from 'date-fns';
 import type { PlanDay, Run } from '../../types';
-import { calendarGridDates, formatMonthYear, toISO, planDayToDate, isToday } from '../../utils/dateUtils';
+import { calendarGridDates, formatMonthYear, toISO, planDayToDate, isToday, extractDate } from '../../utils/dateUtils';
 import { DayCell } from './DayCell';
 
 interface FriendMonthViewProps {
@@ -29,11 +29,12 @@ export function FriendMonthView({ planDays, runs, startDate, onSelectDate, selec
     return map;
   }, [planDays, startDate]);
 
-  // Build map: isoDate -> Run (use first run if multiple)
+  // Build map: isoDate -> Run (extract date portion from datetime, use first run if multiple)
   const runMap = useMemo(() => {
     const map: Record<string, Run> = {};
     for (const run of runs) {
-      if (!map[run.date]) map[run.date] = run;
+      const dateKey = extractDate(run.date);
+      if (!map[dateKey]) map[dateKey] = run;
     }
     return map;
   }, [runs]);

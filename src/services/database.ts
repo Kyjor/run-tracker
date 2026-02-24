@@ -129,6 +129,12 @@ const MIGRATIONS = [
     created_at TEXT NOT NULL
   )`,
   `CREATE INDEX IF NOT EXISTS idx_run_routes_run ON run_routes(run_id)`,
+
+  // v8 — Convert runs.date from date-only (YYYY-MM-DD) to datetime (ISO 8601)
+  // Convert existing date-only values to datetime by appending time from created_at
+  `UPDATE runs SET date = date || 'T' || substr(created_at, 12, 8) || 'Z' WHERE length(date) = 10 AND date NOT LIKE '%T%'`,
+  // For any remaining date-only values (if created_at doesn't have time), use noon UTC
+  `UPDATE runs SET date = date || 'T12:00:00Z' WHERE length(date) = 10 AND date NOT LIKE '%T%'`,
 ];
 
 // ---------------------------------------------------------------------------

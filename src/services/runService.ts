@@ -1,6 +1,8 @@
 import type Database from '@tauri-apps/plugin-sql';
 import type { Run, RunType, DistanceUnit } from '../types';
 import { generateId } from '../utils/generateId';
+import { supabase } from './supabaseClient';
+import { dateToDatetime } from '../utils/dateUtils';
 
 // ---------------------------------------------------------------------------
 // Input types
@@ -69,16 +71,21 @@ export async function getRunsByDateRange(
   startDate: string,
   endDate: string,
 ): Promise<Run[]> {
+  // Convert date-only inputs to datetime range for comparison
+  const startDatetime = startDate.includes('T') ? startDate : `${startDate}T00:00:00Z`;
+  const endDatetime = endDate.includes('T') ? endDate : `${endDate}T23:59:59Z`;
   return db.select<Run[]>(
     'SELECT * FROM runs WHERE date >= $1 AND date <= $2 ORDER BY date DESC',
-    [startDate, endDate],
+    [startDatetime, endDatetime],
   );
 }
 
 export async function getRunsForDate(db: Database, date: string): Promise<Run[]> {
+  // Extract date portion from datetime for comparison
+  // Use DATE() function or substring to match date portion
   return db.select<Run[]>(
-    'SELECT * FROM runs WHERE date = $1 ORDER BY created_at',
-    [date],
+    "SELECT * FROM runs WHERE substr(date, 1, 10) = $1 ORDER BY date ASC",
+    [date.length === 10 ? date : date.split('T')[0]],
   );
 }
 
@@ -94,10 +101,15 @@ export async function getRunById(db: Database, id: string): Promise<Run | null> 
 export async function createRun(db: Database, input: CreateRunInput): Promise<Run> {
   const id = input.id ?? generateId();
   const now = new Date().toISOString();
+  
+  // Convert date-only input to datetime (use current time if not provided)
+  const runDate = input.date.includes('T') 
+    ? input.date 
+    : dateToDatetime(input.date, new Date().toISOString().split('T')[1].split('.')[0] + 'Z');
 
   const run: Run = {
     id,
-    date: input.date,
+    date: runDate,
     distance_value: input.distance_value,
     distance_unit: input.distance_unit,
     duration_seconds: input.duration_seconds,
@@ -205,6 +217,44 @@ export async function updateRun(
 // ---------------------------------------------------------------------------
 
 export async function deleteRun(db: Database, id: string): Promise<void> {
+  // Check if run is synced to Supabase before deleting locally
+  const runs = await db.select<Run[]>('SELECT sync_status FROM runs WHERE id = $1', [id]);
+  const run = runs[0];
+  
+  // If run is synced, try to delete from Supabase first
+  if (run && run.sync_status === 'synced') {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session) {
+      const { error } = await supabase
+        .from('user_runs')
+        .delete()
+        .eq('id', id)
+        .eq('user_id', session.user.id);
+      
+      if (error) {
+        // If delete fails (e.g., offline), queue it for later sync
+        console.warn('Failed to delete run from Supabase, queueing for later:', error);
+        const queueId = generateId();
+        const now = new Date().toISOString();
+        await db.execute(
+          `INSERT INTO sync_queue (id, table_name, record_id, action, payload, created_at)
+           VALUES ($1, $2, $3, $4, $5, $6)`,
+          [queueId, 'user_runs', id, 'delete', JSON.stringify({ id }), now]
+        );
+      }
+    } else {
+      // Not authenticated, queue the delete
+      const queueId = generateId();
+      const now = new Date().toISOString();
+      await db.execute(
+        `INSERT INTO sync_queue (id, table_name, record_id, action, payload, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [queueId, 'user_runs', id, 'delete', JSON.stringify({ id }), now]
+      );
+    }
+  }
+  
+  // Delete locally (always delete locally, even if cloud delete failed)
   await db.execute('DELETE FROM runs WHERE id = $1', [id]);
 }
 

@@ -11,13 +11,22 @@ export function AuthScreen() {
   const [mode, setMode] = useState<'signin' | 'signup'>('signin');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [success, setSuccess] = useState('');
+  const [passwordMismatch, setPasswordMismatch] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     clearError();
+    setPasswordMismatch(false);
+    
+    if (mode === 'signup' && password !== confirmPassword) {
+      setPasswordMismatch(true);
+      return;
+    }
+    
     setIsLoading(true);
     try {
       if (mode === 'signin') {
@@ -76,11 +85,31 @@ export function AuthScreen() {
             type="password"
             placeholder="••••••••"
             value={password}
-            onChange={e => setPassword(e.target.value)}
+            onChange={e => {
+              setPassword(e.target.value);
+              setPasswordMismatch(false);
+            }}
             required
             minLength={6}
           />
+          {mode === 'signup' && (
+            <Input
+              label="Confirm Password"
+              type="password"
+              placeholder="••••••••"
+              value={confirmPassword}
+              onChange={e => {
+                setConfirmPassword(e.target.value);
+                setPasswordMismatch(false);
+              }}
+              required
+              minLength={6}
+            />
+          )}
 
+          {passwordMismatch && (
+            <p className="text-sm text-red-500 text-center">Passwords do not match</p>
+          )}
           {error && (
             <p className="text-sm text-red-500 text-center">{error}</p>
           )}
@@ -93,7 +122,13 @@ export function AuthScreen() {
 
       <button
         className="mt-6 text-sm text-primary-600 dark:text-primary-400"
-        onClick={() => { setMode(m => m === 'signin' ? 'signup' : 'signin'); clearError(); setSuccess(''); }}
+        onClick={() => {
+          setMode(m => m === 'signin' ? 'signup' : 'signin');
+          clearError();
+          setSuccess('');
+          setPasswordMismatch(false);
+          setConfirmPassword('');
+        }}
       >
         {mode === 'signin' ? "Don't have an account? Sign up" : 'Already have an account? Sign in'}
       </button>

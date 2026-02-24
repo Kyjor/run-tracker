@@ -1,6 +1,6 @@
 [package]
 name = "run-with-friends"
-version = "0.3.0"
+version = "0.3.3"
 description = "Run With Friends - Training Plan & Run Tracker"
 authors = ["you"]
 edition = "2021"
@@ -18,3 +18,4 @@ tauri-plugin-sql = { version = "2", features = ["sqlite"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 libc = "0.2"
+chrono = { version = "0.4", features = ["serde"] }

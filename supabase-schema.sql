@@ -50,7 +50,7 @@ CREATE TRIGGER on_auth_user_created
 CREATE TABLE IF NOT EXISTS user_runs (
   id TEXT PRIMARY KEY,
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  date DATE NOT NULL,
+  date TIMESTAMPTZ NOT NULL,
   distance_value REAL NOT NULL,
   distance_unit TEXT NOT NULL CHECK (distance_unit IN ('mi', 'km')),
   duration_seconds INTEGER NOT NULL,
@@ -387,9 +387,22 @@ CREATE POLICY "Users can view all likes" ON feed_likes
 CREATE POLICY "Users can manage own likes" ON feed_likes
   FOR ALL USING (auth.uid() = user_id);
 
--- Feed Comments: users can view all, manage their own
-CREATE POLICY "Users can view all comments" ON feed_comments
-  FOR SELECT USING (true);
+-- Feed Comments: users can view comments on activities they can see (own or from people they follow)
+CREATE POLICY "Users can view comments on visible activities" ON feed_comments
+  FOR SELECT USING (
+    EXISTS (
+      SELECT 1 FROM feed_activities
+      WHERE feed_activities.id = feed_comments.activity_id
+      AND (
+        feed_activities.user_id = auth.uid() OR
+        EXISTS (
+          SELECT 1 FROM follows
+          WHERE follows.follower_id = auth.uid()
+          AND follows.following_id = feed_activities.user_id
+        )
+      )
+    )
+  );
 CREATE POLICY "Users can manage own comments" ON feed_comments
   FOR ALL USING (auth.uid() = user_id);
 

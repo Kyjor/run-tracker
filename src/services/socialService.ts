@@ -49,6 +49,8 @@ export async function searchProfiles(query: string): Promise<Profile[]> {
 export async function followUser(targetId: string): Promise<void> {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) return;
+  // Guard against self-follow, which can cause duplicate/self feed artifacts.
+  if (targetId === session.user.id) return;
   await supabase.from('follows').upsert({ follower_id: session.user.id, following_id: targetId });
 }
 
@@ -202,7 +204,9 @@ export async function getFeed(limit = 30, offset = 0): Promise<FeedItem[]> {
     .select('following_id')
     .eq('follower_id', session.user.id);
 
-  const followingIds = (follows ?? []).map(f => f.following_id);
+  const followingIds = (follows ?? [])
+    .map(f => f.following_id)
+    .filter(id => id !== session.user.id);
   if (followingIds.length === 0) return [];
 
   // Show recent runs from followed users (this is the primary feed content)
@@ -237,19 +241,13 @@ export async function getFeed(limit = 30, offset = 0): Promise<FeedItem[]> {
       run_date: run.date, // Store actual run date for display
     };
 
-    // Check if feed_activity exists for this run (match by user, type, and created_at within 1 minute)
-    const runTime = new Date(run.created_at);
-    const timeStart = new Date(runTime.getTime() - 60000).toISOString();
-    const timeEnd = new Date(runTime.getTime() + 60000).toISOString();
-
+    // Check if feed_activity exists for this run (stable match by run_id in JSON payload)
     const { data: existingActivities } = await supabase
       .from('feed_activities')
       .select('id')
       .eq('user_id', run.user_id)
       .eq('activity_type', 'run_completed')
-      .gte('created_at', timeStart)
-      .lte('created_at', timeEnd)
-      .limit(1);
+      .contains('data', { run_id: run.id });
 
     let activityId: string;
     if (existingActivities && existingActivities.length > 0) {
@@ -302,6 +300,20 @@ export async function publishFeedActivity(
 ): Promise<string | null> {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) return null;
+
+  // Idempotency for run feed items: one activity per run_id per user.
+  if (activityType === 'run_completed' && typeof data.run_id === 'string' && data.run_id.length > 0) {
+    const { data: existing } = await supabase
+      .from('feed_activities')
+      .select('id')
+      .eq('user_id', session.user.id)
+      .eq('activity_type', 'run_completed')
+      .contains('data', { run_id: data.run_id })
+      .limit(1)
+      .maybeSingle();
+    if (existing?.id) return existing.id;
+  }
+
   const { data: activity, error } = await supabase
     .from('feed_activities')
     .insert({
@@ -324,23 +336,67 @@ export async function getFeedActivityIdByRunId(runId: string): Promise<string | 
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) return null;
 
-  // Find feed activity where data contains this run_id
+  // Find all feed activities where data contains this run_id
+  // (duplicates can exist from earlier versions, so pick the one with most comments)
   const { data: activities } = await supabase
     .from('feed_activities')
-    .select('id')
+    .select('id, created_at')
     .eq('user_id', session.user.id)
     .eq('activity_type', 'run_completed')
     .contains('data', { run_id: runId })
-    .limit(1);
+    .order('created_at', { ascending: true });
 
-  return activities && activities.length > 0 ? activities[0].id : null;
+  if (!activities || activities.length === 0) return null;
+  if (activities.length === 1) return activities[0].id;
+
+  const ids = activities.map(a => a.id);
+  const { data: comments } = await supabase
+    .from('feed_comments')
+    .select('activity_id')
+    .in('activity_id', ids);
+
+  const commentCount = new Map<string, number>();
+  for (const id of ids) commentCount.set(id, 0);
+  for (const c of comments ?? []) {
+    commentCount.set(c.activity_id, (commentCount.get(c.activity_id) ?? 0) + 1);
+  }
+
+  const sorted = [...activities].sort((a, b) => {
+    const byComments = (commentCount.get(b.id) ?? 0) - (commentCount.get(a.id) ?? 0);
+    if (byComments !== 0) return byComments;
+    return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+  });
+
+  return sorted[0]?.id ?? null;
 }
 
 export async function getComments(activityId: string): Promise<FeedComment[]> {
+  // Resolve duplicate feed_activities for the same run and fetch comments across all.
+  // Older clients could create multiple activity rows for one run, which splits comments.
+  let activityIds = [activityId];
+  const { data: seedActivity } = await supabase
+    .from('feed_activities')
+    .select('user_id, activity_type, data')
+    .eq('id', activityId)
+    .maybeSingle();
+
+  const runId = (seedActivity?.data as { run_id?: string } | null)?.run_id;
+  if (seedActivity?.activity_type === 'run_completed' && runId) {
+    const { data: related } = await supabase
+      .from('feed_activities')
+      .select('id')
+      .eq('user_id', seedActivity.user_id)
+      .eq('activity_type', 'run_completed')
+      .contains('data', { run_id: runId });
+    if (related && related.length > 0) {
+      activityIds = related.map(a => a.id);
+    }
+  }
+
   const { data: comments } = await supabase
     .from('feed_comments')
     .select('*')
-    .eq('activity_id', activityId)
+    .in('activity_id', activityIds)
     .order('created_at', { ascending: true });
 
   if (!comments || comments.length === 0) return [];
@@ -364,9 +420,32 @@ export async function getComments(activityId: string): Promise<FeedComment[]> {
 export async function addComment(activityId: string, text: string): Promise<void> {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) return;
+  // Write to a canonical activity row for run comments (pick the oldest row).
+  let targetActivityId = activityId;
+  const { data: seedActivity } = await supabase
+    .from('feed_activities')
+    .select('user_id, activity_type, data')
+    .eq('id', activityId)
+    .maybeSingle();
+
+  const runId = (seedActivity?.data as { run_id?: string } | null)?.run_id;
+  if (seedActivity?.activity_type === 'run_completed' && runId) {
+    const { data: related } = await supabase
+      .from('feed_activities')
+      .select('id, created_at')
+      .eq('user_id', seedActivity.user_id)
+      .eq('activity_type', 'run_completed')
+      .contains('data', { run_id: runId })
+      .order('created_at', { ascending: true })
+      .limit(1);
+    if (related && related.length > 0) {
+      targetActivityId = related[0].id;
+    }
+  }
+
   await supabase.from('feed_comments').insert({
     user_id: session.user.id,
-    activity_id: activityId,
+    activity_id: targetActivityId,
     text,
   });
 }

@@ -82,7 +82,8 @@ async fn request_healthkit_permission() -> Result<bool, String> {
     }
     #[cfg(not(target_os = "ios"))]
     {
-        Err("HealthKit is only available on iOS".to_string())
+        // Mock: return true for development/testing
+        Ok(true)
     }
 }
 
@@ -116,8 +117,39 @@ async fn fetch_healthkit_workouts(
     }
     #[cfg(not(target_os = "ios"))]
     {
-        let _ = (start_date, end_date);
-        Err("HealthKit is only available on iOS".to_string())
+        // Mock data for development/testing on Mac
+        use chrono::{Utc, Duration};
+        
+        let now = Utc::now();
+        let mut workouts = Vec::new();
+        
+        // Generate 5 mock workouts over the last 30 days
+        for i in 0..5 {
+            let days_ago = i * 6; // Spread over ~30 days
+            let start = now - Duration::days(days_ago as i64) - Duration::hours(1);
+            let duration_mins = 30 + (i * 5); // 30-50 min workouts
+            let end = start + Duration::minutes(duration_mins as i64);
+            
+            let distance = 5000.0 + (i as f64 * 1000.0); // 5-9 km
+            let duration_secs = duration_mins as f64 * 60.0;
+            
+            workouts.push(HealthKitWorkout {
+                id: format!("mock-workout-{}", i),
+                activity_type: if i % 2 == 0 { "running".to_string() } else { "walking".to_string() },
+                start_date: start.to_rfc3339(),
+                end_date: end.to_rfc3339(),
+                duration_seconds: duration_secs,
+                distance_meters: Some(distance),
+                energy_burned_kcal: Some(300.0 + (i as f64 * 50.0)),
+                average_heart_rate: Some(140.0 + (i as f64 * 10.0)),
+                max_heart_rate: Some(160.0 + (i as f64 * 10.0)),
+                temperature_celsius: Some(20.0 + (i as f64 * 2.0)),
+                humidity_percent: Some(60.0),
+                weather_condition: Some("clear".to_string()),
+            });
+        }
+        
+        Ok(workouts)
     }
 }
 
@@ -149,8 +181,28 @@ async fn fetch_workout_details(
     }
     #[cfg(not(target_os = "ios"))]
     {
-        let _ = (workout_id, max_heart_rate_bpm);
-        Err("HealthKit is only available on iOS".to_string())
+        // Mock data for development/testing on Mac
+        let _ = max_heart_rate_bpm;
+        
+        // Return mock details for any workout ID
+        Ok(WorkoutDetails {
+            hr_zone_1_seconds: Some(300.0),
+            hr_zone_2_seconds: Some(600.0),
+            hr_zone_3_seconds: Some(400.0),
+            hr_zone_4_seconds: Some(200.0),
+            hr_zone_5_seconds: Some(100.0),
+            min_heart_rate: Some(65.0),
+            average_cadence: Some(165.0),
+            average_stride_length_meters: Some(1.2),
+            average_ground_contact_time_ms: Some(250.0),
+            average_vertical_oscillation_cm: Some(8.5),
+            average_power_watts: Some(280.0),
+            max_power_watts: Some(350.0),
+            elevation_gain_meters: Some(150.0),
+            elevation_loss_meters: Some(120.0),
+            vo2_max: Some(52.0),
+            route_points: Some(r#"[{"lat":37.7749,"lng":-122.4194,"alt":10.0,"t":1000},{"lat":37.7750,"lng":-122.4195,"alt":12.0,"t":2000}]"#.to_string()),
+        })
     }
 }
 

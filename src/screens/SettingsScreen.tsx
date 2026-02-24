@@ -14,7 +14,14 @@ import { useDb } from '../contexts/DatabaseContext';
 import { useToast } from '../contexts/ToastContext';
 import { forceSyncToCloud, pullFromCloud } from '../services/syncService';
 import { exportFullBackup, exportRunsCsv, restoreFromBackup, validateBackup } from '../services/backupService';
-import { requestHealthKitPermission, fetchHealthKitWorkouts, workoutExists, importHealthKitWorkout } from '../services/healthkitService';
+import {
+  requestHealthKitPermission,
+  fetchHealthKitWorkouts,
+  workoutExists,
+  importHealthKitWorkout,
+  getHealthKitDebugLogs,
+  clearHealthKitDebugLogs,
+} from '../services/healthkitService';
 import { parseISO } from 'date-fns';
 import type { PaceZones, PaceZoneType } from '../types';
 import { PACE_ZONE_LABELS } from '../types';
@@ -412,10 +419,21 @@ function HealthKitSection() {
   const [workouts, setWorkouts] = useState<any[]>([]);
   const [importDateRange, setImportDateRange] = useState<'30' | '90' | 'all'>('30');
   const [importingIds, setImportingIds] = useState<Set<string>>(new Set());
+  const [showDebugConsole, setShowDebugConsole] = useState(false);
+  const [debugLogs, setDebugLogs] = useState<Array<{ ts: string; level: 'info' | 'error'; message: string }>>([]);
 
   useEffect(() => {
     checkPermission();
   }, []);
+
+  useEffect(() => {
+    if (!showDebugConsole) return;
+    setDebugLogs(getHealthKitDebugLogs());
+    const timer = setInterval(() => {
+      setDebugLogs(getHealthKitDebugLogs());
+    }, 1200);
+    return () => clearInterval(timer);
+  }, [showDebugConsole]);
 
   async function checkPermission() {
     try {
@@ -436,30 +454,35 @@ function HealthKitSection() {
     if (granted) {
       showToast('HealthKit permission granted!', 'success');
       loadWorkouts();
+      setDebugLogs(getHealthKitDebugLogs());
     } else {
       showToast('HealthKit permission denied', 'error');
     }
   }
 
-  async function loadWorkouts() {
+  async function loadWorkouts(rangeOverride?: '30' | '90' | 'all') {
     if (!db) return;
     setLoading(true);
     try {
+      const effectiveRange = rangeOverride ?? importDateRange;
       const endDate = new Date();
       let startDate: Date | undefined;
       
-      if (importDateRange === '30') {
+      if (effectiveRange === '30') {
         startDate = new Date();
         startDate.setDate(startDate.getDate() - 30);
-      } else if (importDateRange === '90') {
+      } else if (effectiveRange === '90') {
         startDate = new Date();
         startDate.setDate(startDate.getDate() - 90);
       }
       
-      const startDateStr = startDate ? format(startDate, 'yyyy-MM-dd') : undefined;
-      const endDateStr = format(endDate, 'yyyy-MM-dd');
+      // Swift expects ISO 8601 datetime strings, not just dates
+      const startDateStr = startDate ? startDate.toISOString() : undefined;
+      const endDateStr = endDate.toISOString();
       
       const fetchedWorkouts = await fetchHealthKitWorkouts(startDateStr, endDateStr);
+      
+      console.log(`[HealthKit] Fetched ${fetchedWorkouts.length} workouts from ${startDateStr || 'all time'} to ${endDateStr}`);
       
       // Check which ones already exist
       const workoutsWithStatus = await Promise.all(
@@ -470,9 +493,11 @@ function HealthKitSection() {
       );
       
       setWorkouts(workoutsWithStatus);
+      setDebugLogs(getHealthKitDebugLogs());
     } catch (error) {
       console.error('Failed to load workouts:', error);
-      showToast('Failed to load workouts', 'error');
+      showToast(`Failed to load workouts: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
+      setDebugLogs(getHealthKitDebugLogs());
     } finally {
       setLoading(false);
     }
@@ -497,6 +522,7 @@ function HealthKitSection() {
       console.error('Import failed:', error);
       showToast('Failed to import workout', 'error');
     } finally {
+      setDebugLogs(getHealthKitDebugLogs());
       setImportingIds(prev => {
         const next = new Set(prev);
         next.delete(workout.id);
@@ -524,8 +550,9 @@ function HealthKitSection() {
               ]}
               value={importDateRange}
               onChange={e => {
-                setImportDateRange(e.target.value as '30' | '90' | 'all');
-                loadWorkouts();
+                const nextRange = e.target.value as '30' | '90' | 'all';
+                setImportDateRange(nextRange);
+                loadWorkouts(nextRange);
               }}
             />
           </div>
@@ -552,6 +579,46 @@ function HealthKitSection() {
               ))}
             </div>
           )}
+
+          <div className="border-t border-gray-200 dark:border-gray-700 pt-3">
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-gray-500 dark:text-gray-400">HealthKit Debug Console</p>
+              <button
+                type="button"
+                onClick={() => setShowDebugConsole(v => !v)}
+                className="text-xs text-primary-600 dark:text-primary-400"
+              >
+                {showDebugConsole ? 'Hide' : 'Show'}
+              </button>
+            </div>
+            {showDebugConsole && (
+              <div className="mt-2">
+                <div className="flex justify-end mb-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      clearHealthKitDebugLogs();
+                      setDebugLogs([]);
+                    }}
+                    className="text-xs text-red-500"
+                  >
+                    Clear logs
+                  </button>
+                </div>
+                <div className="max-h-48 overflow-y-auto rounded-lg bg-black text-green-300 text-xs p-2 font-mono">
+                  {debugLogs.length === 0 ? (
+                    <div className="text-gray-400">No logs yet...</div>
+                  ) : (
+                    debugLogs.map((log, idx) => (
+                      <div key={`${log.ts}-${idx}`} className="whitespace-pre-wrap break-words">
+                        [{format(parseISO(log.ts), 'HH:mm:ss')}] {log.level.toUpperCase()} {log.message}
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
         </>
       ) : (
         <>

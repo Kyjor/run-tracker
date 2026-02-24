@@ -9,19 +9,55 @@
 
 import type Database from '@tauri-apps/plugin-sql';
 import { supabase } from './supabaseClient';
-import type { Run, Goal, ActivePlan, TrainingPlan } from '../types';
+import type { Run, Goal, ActivePlan, TrainingPlan, SyncQueueItem } from '../types';
 import { saveSettings } from './settingsService';
 
 export async function syncToCloud(db: Database): Promise<void> {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) return;
 
+  // Process queued deletes first (before upserts to avoid conflicts)
+  await processQueuedDeletes(db, session.user.id);
+  
+  // Then sync dirty records (upserts)
   await pushDirtyRuns(db, session.user.id);
   await pushDirtyGoals(db, session.user.id);
   await pushDirtyActivePlan(db, session.user.id);
   await pushDirtyCustomPlans(db, session.user.id);
 
   await saveSettings(db, { last_sync_at: new Date().toISOString() });
+}
+
+/**
+ * Process queued deletes from sync_queue table.
+ * These are deletes that failed when the user was offline.
+ */
+async function processQueuedDeletes(db: Database, userId: string): Promise<void> {
+  const queued = await db.select<SyncQueueItem[]>(
+    "SELECT * FROM sync_queue WHERE action = 'delete' ORDER BY created_at ASC"
+  );
+
+  for (const item of queued) {
+    try {
+      const { error } = await supabase
+        .from(item.table_name)
+        .delete()
+        .eq('id', item.record_id)
+        .eq('user_id', userId);
+
+      if (error) {
+        console.error(`Failed to process queued delete for ${item.table_name}:${item.record_id}:`, error);
+        // Keep in queue for next sync attempt
+      } else {
+        // Successfully deleted, remove from queue
+        await db.execute('DELETE FROM sync_queue WHERE id = $1', [item.id]);
+      }
+    } catch (err) {
+      console.error(`Error processing queued delete ${item.id}:`, err);
+      // Remove malformed queue items
+      await db.execute('DELETE FROM sync_queue WHERE id = $1', [item.id]);
+    }
+  }
 }
 
 /**

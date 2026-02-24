@@ -14,7 +14,7 @@ import { useSettings } from '../contexts/SettingsContext';
 import { useAuth } from '../contexts/AuthContext';
 import { formatDistance, formatDuration, formatPace } from '../utils/paceUtils';
 import { calculateStatsFromRuns, calculateWeeklyMileage, calculateRunTypeBreakdown } from '../utils/calculateStatsFromRuns';
-import { planDayToDate } from '../utils/dateUtils';
+import { planDayToDate, extractDate } from '../utils/dateUtils';
 import { MileageChart } from '../components/charts/MileageChart';
 import { RunTypeChart } from '../components/charts/RunTypeChart';
 import { FriendMonthView } from '../components/calendar/FriendMonthView';
@@ -146,7 +146,7 @@ export function FriendProfileScreen() {
     } else {
       setSelectedPlanDay(null);
     }
-    const run = allRuns.find(r => r.date === iso);
+    const run = allRuns.find(r => extractDate(r.date) === iso);
     setSelectedRun(run ?? null);
     setDetailSheetOpen(true);
   }
@@ -163,7 +163,7 @@ export function FriendProfileScreen() {
       if (dayDate <= today && day.activity_type !== 'rest') {
         scheduled++;
         // Check if there's a run for this plan day
-        const hasRun = allRuns.some(r => r.date === dayDate && r.plan_day_id === day.id);
+        const hasRun = allRuns.some(r => extractDate(r.date) === dayDate && r.plan_day_id === day.id);
         if (hasRun) completed++;
       }
     });

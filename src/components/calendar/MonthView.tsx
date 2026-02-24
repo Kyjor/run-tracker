@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { addMonths, subMonths } from 'date-fns';
 import type { PlanDay, Run, ActivePlan, TrainingPlan } from '../../types';
-import { calendarGridDates, formatMonthYear, toISO, planDayToDate, isToday } from '../../utils/dateUtils';
+import { calendarGridDates, formatMonthYear, toISO, planDayToDate, isToday, extractDate } from '../../utils/dateUtils';
 import { getPlanDays } from '../../services/planService';
 import { getRunsByDateRange } from '../../services/runService';
 import { DayCell } from './DayCell';
@@ -49,10 +49,14 @@ export function MonthView({ activePlan, activePlanDetails, onSelectDate, selecte
     return map;
   }, [planDays, activePlan]);
 
-  // Build map: isoDate -> Run
+  // Build map: isoDate -> Run (extract date portion from datetime)
   const runMap = useMemo(() => {
     const map: Record<string, Run> = {};
-    for (const run of runs) { map[run.date] = run; }
+    for (const run of runs) {
+      const dateKey = extractDate(run.date);
+      // Use first run if multiple runs on same day
+      if (!map[dateKey]) map[dateKey] = run;
+    }
     return map;
   }, [runs]);
 

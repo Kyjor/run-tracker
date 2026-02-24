@@ -147,7 +147,7 @@ export interface RoutePoint {
 
 export interface Run {
   id: string;
-  date: string; // YYYY-MM-DD
+  date: string; // ISO 8601 datetime (e.g., "2025-02-22T14:30:00Z")
   distance_value: number;
   distance_unit: DistanceUnit;
   duration_seconds: number;

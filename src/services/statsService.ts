@@ -2,6 +2,7 @@ import type Database from '@tauri-apps/plugin-sql';
 import type { RunStats, DistanceUnit } from '../types';
 import { convertDistance } from '../utils/paceUtils';
 import { format, subDays, parseISO, differenceInCalendarDays } from 'date-fns';
+import { extractDate } from '../utils/dateUtils';
 
 interface RunRow {
   date: string;
@@ -23,11 +24,15 @@ export async function getRunStats(
   let query = 'SELECT date, distance_value, distance_unit, duration_seconds FROM runs';
   const params: string[] = [];
   if (startDate && endDate) {
+    // Convert date-only inputs to datetime range
+    const startDatetime = startDate.includes('T') ? startDate : `${startDate}T00:00:00Z`;
+    const endDatetime = endDate.includes('T') ? endDate : `${endDate}T23:59:59Z`;
     query += ' WHERE date >= $1 AND date <= $2';
-    params.push(startDate, endDate);
+    params.push(startDatetime, endDatetime);
   } else if (startDate) {
+    const startDatetime = startDate.includes('T') ? startDate : `${startDate}T00:00:00Z`;
     query += ' WHERE date >= $1';
-    params.push(startDate);
+    params.push(startDatetime);
   }
   query += ' ORDER BY date ASC';
 
@@ -53,8 +58,8 @@ export async function getRunStats(
     ...runs.map(r => convertDistance(r.distance_value, r.distance_unit, unit)),
   );
 
-  // Streak calculation
-  const runDates = new Set(runs.map(r => r.date));
+  // Streak calculation - extract date portion from datetime values
+  const runDates = new Set(runs.map(r => extractDate(r.date)));
   let current_streak = 0;
   let longest_streak = 0;
   let streak = 0;
@@ -124,17 +129,22 @@ export async function getWeeklyMileage(
     if (startDate && e < startDate) continue;
     if (endDate && s > endDate) continue;
     
+    // Convert date-only to datetime range
+    const startDatetime = `${s}T00:00:00Z`;
+    const endDatetime = `${e}T23:59:59Z`;
     let query = 'SELECT distance_value, distance_unit FROM runs WHERE date >= $1 AND date <= $2';
-    const params = [s, e];
+    const params = [startDatetime, endDatetime];
     
     // Further filter by date range if provided
     if (startDate && s < startDate) {
+      const startDatetimeFilter = startDate.includes('T') ? startDate : `${startDate}T00:00:00Z`;
       query = 'SELECT distance_value, distance_unit FROM runs WHERE date >= $1 AND date <= $2';
-      params[0] = startDate;
+      params[0] = startDatetimeFilter;
     }
     if (endDate && e > endDate) {
+      const endDatetimeFilter = endDate.includes('T') ? endDate : `${endDate}T23:59:59Z`;
       query = 'SELECT distance_value, distance_unit FROM runs WHERE date >= $1 AND date <= $2';
-      params[1] = endDate;
+      params[1] = endDatetimeFilter;
     }
     
     const rows = await db.select<RunRow[]>(query, params);
@@ -154,8 +164,11 @@ export async function getRunTypeBreakdown(
   let query = 'SELECT run_type, distance_value, distance_unit FROM runs';
   const params: string[] = [];
   if (startDate && endDate) {
+    // Convert date-only inputs to datetime range
+    const startDatetime = startDate.includes('T') ? startDate : `${startDate}T00:00:00Z`;
+    const endDatetime = endDate.includes('T') ? endDate : `${endDate}T23:59:59Z`;
     query += ' WHERE date >= $1 AND date <= $2';
-    params.push(startDate, endDate);
+    params.push(startDatetime, endDatetime);
   }
   const rows = await db.select<(RunRow & { run_type: string })[]>(query, params);
   const map: Record<string, number> = {};

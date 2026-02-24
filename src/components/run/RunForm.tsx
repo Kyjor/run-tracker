@@ -4,12 +4,14 @@ import { RUN_TYPE_LABELS } from '../../types';
 import { Input, Textarea } from '../ui/Input';
 import { Select } from '../ui/Select';
 import { Button } from '../ui/Button';
-import { today } from '../../utils/dateUtils';
+import { today, extractDate, dateToDatetime } from '../../utils/dateUtils';
 import { formatPace, calcPaceSeconds } from '../../utils/paceUtils';
+import { parseISO, format } from 'date-fns';
 import { useSettings } from '../../contexts/SettingsContext';
 
 interface RunFormValues {
   date: string;
+  time: string;
   distance_value: string;
   distance_unit: DistanceUnit;
   hours: string;
@@ -52,9 +54,29 @@ export function RunForm({ initialDate, prefillPlanDay, existingRun, onSubmit, is
   const { settings } = useSettings();
 
   const hms = existingRun ? secsToHMS(existingRun.duration_seconds) : null;
+  
+  // Extract date and time from existing run's datetime, or use defaults
+  let initialDateValue = existingRun?.date 
+    ? extractDate(existingRun.date) 
+    : (initialDate ?? today());
+  
+  let initialTimeValue = '12:00';
+  if (existingRun?.date && existingRun.date.includes('T')) {
+    // Extract time from datetime (format: HH:mm)
+    try {
+      const dt = parseISO(existingRun.date);
+      initialTimeValue = format(dt, 'HH:mm');
+    } catch {
+      initialTimeValue = '12:00';
+    }
+  } else {
+    // Default to current time for new runs
+    initialTimeValue = format(new Date(), 'HH:mm');
+  }
 
   const [values, setValues] = useState<RunFormValues>({
-    date: existingRun?.date ?? initialDate ?? today(),
+    date: initialDateValue,
+    time: initialTimeValue,
     distance_value: existingRun?.distance_value?.toString() ?? prefillPlanDay?.distance_value?.toString() ?? '',
     distance_unit: (existingRun?.distance_unit ?? prefillPlanDay?.distance_unit ?? settings.units) as DistanceUnit,
     hours: hms?.h ?? '0',
@@ -90,8 +112,12 @@ export function RunForm({ initialDate, prefillPlanDay, existingRun, onSubmit, is
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!validate()) return;
+    
+    // Combine date and time into ISO 8601 datetime
+    const datetime = dateToDatetime(values.date, `${values.time}:00Z`);
+    
     await onSubmit({
-      date: values.date,
+      date: datetime,
       distance_value: dist,
       distance_unit: values.distance_unit as DistanceUnit,
       duration_seconds: durationSeconds,
@@ -103,14 +129,26 @@ export function RunForm({ initialDate, prefillPlanDay, existingRun, onSubmit, is
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-      <Input
-        label="Date"
-        type="date"
-        value={values.date}
-        onChange={e => set('date', e.target.value)}
-        max={today()}
-        error={errors.date}
-      />
+      <div className="flex gap-2">
+        <div className="flex-1">
+          <Input
+            label="Date"
+            type="date"
+            value={values.date}
+            onChange={e => set('date', e.target.value)}
+            max={today()}
+            error={errors.date}
+          />
+        </div>
+        <div className="flex-1">
+          <Input
+            label="Time"
+            type="time"
+            value={values.time}
+            onChange={e => set('time', e.target.value)}
+          />
+        </div>
+      </div>
 
       <div className="flex gap-2">
         <div className="flex-1">

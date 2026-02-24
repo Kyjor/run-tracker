@@ -55,6 +55,8 @@ export function LogRunScreen() {
           unit: run.distance_unit,
           duration: run.duration_seconds,
           run_type: run.run_type,
+          run_id: run.id,
+          run_date: run.date,
         }).catch(() => {});
       }
     }

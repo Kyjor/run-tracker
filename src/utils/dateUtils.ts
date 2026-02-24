@@ -29,6 +29,24 @@ export function today(): string {
   return format(new Date(), 'yyyy-MM-dd');
 }
 
+/** Extract date portion (YYYY-MM-DD) from a datetime string (ISO 8601) */
+export function extractDate(datetime: string): string {
+  // If it's already date-only, return as-is
+  if (datetime.length === 10 && !datetime.includes('T')) {
+    return datetime;
+  }
+  // Extract date portion from ISO 8601 datetime
+  return datetime.split('T')[0];
+}
+
+/** Convert a date (YYYY-MM-DD) to datetime (ISO 8601) at a specific time, defaults to noon UTC */
+export function dateToDatetime(date: string, time?: string): string {
+  // If already datetime, return as-is
+  if (date.includes('T')) return date;
+  // Use provided time or default to noon UTC
+  return `${date}T${time || '12:00:00Z'}`;
+}
+
 /** 'Nov 22' */
 export function formatShort(iso: string): string {
   return format(parseISO(iso), 'MMM d');

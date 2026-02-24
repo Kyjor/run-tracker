@@ -2,7 +2,7 @@ import React, { createContext, useCallback, useContext, useEffect, useState } fr
 import type { TrainingPlan, ActivePlan, TodayActivity } from '../types';
 import { getActivePlan, getPlanById, getPlanDayForDate } from '../services/planService';
 import { getRunForPlanDay } from '../services/runService';
-import { currentPlanPosition } from '../utils/dateUtils';
+import { currentPlanPosition, today, extractDate } from '../utils/dateUtils';
 import { useDatabase } from './DatabaseContext';
 
 interface PlanContextValue {
@@ -54,6 +54,11 @@ export function PlanProvider({ children }: { children: React.ReactNode }) {
           let loggedRun = null;
           if (planDay) {
             loggedRun = await getRunForPlanDay(db, planDay.id);
+            // Only count as completed if the run's date matches today
+            // This prevents yesterday's run from marking today's plan day as complete
+            if (loggedRun && extractDate(loggedRun.date) !== today()) {
+              loggedRun = null;
+            }
           }
           setTodayActivity({
             plan_day: planDay,
