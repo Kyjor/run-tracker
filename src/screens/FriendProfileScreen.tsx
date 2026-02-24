@@ -76,12 +76,43 @@ export function FriendProfileScreen() {
       const ap = await getActivePlanByUser(id);
       if (ap && ap.is_active) {
         setActivePlan(ap);
-        const [plan, days] = await Promise.all([
-          getTrainingPlanById(ap.plan_id),
-          getPlanDaysByUser(id, ap.plan_id),
-        ]);
-        setPlanDetails(plan);
-        setPlanDays(days);
+        
+        // Use denormalized data if available, otherwise fallback to separate queries
+        if (ap.plan_name && ap.plan_days_json) {
+          // Use denormalized data from active_plans
+          setPlanDetails({
+            id: ap.plan_id,
+            name: ap.plan_name,
+            description: ap.plan_description ?? '',
+            race_type: ap.race_type as any,
+            difficulty: ap.difficulty as any,
+            duration_weeks: ap.duration_weeks ?? 0,
+            is_builtin: 0,
+            created_at: '',
+            updated_at: '',
+            sync_status: 'synced',
+          });
+          setPlanDays(ap.plan_days_json.map((pd: any) => ({
+            id: pd.id,
+            plan_id: ap.plan_id,
+            week_number: pd.week_number,
+            day_of_week: pd.day_of_week,
+            activity_type: pd.activity_type,
+            distance_value: pd.distance_value,
+            distance_unit: pd.distance_unit,
+            duration_minutes: pd.duration_minutes,
+            description: pd.description,
+            workout_segments: pd.workout_segments,
+          })));
+        } else {
+          // Fallback to separate queries if denormalized data not available
+          const [plan, days] = await Promise.all([
+            getTrainingPlanById(ap.plan_id),
+            getPlanDaysByUser(id, ap.plan_id),
+          ]);
+          setPlanDetails(plan);
+          setPlanDays(days);
+        }
       } else {
         setActivePlan(null);
         setPlanDetails(null);

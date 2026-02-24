@@ -142,24 +142,34 @@ export async function getAllRunsByUser(userId: string): Promise<Run[]> {
   return (data ?? []) as Run[];
 }
 
-/** Get friend's active plan */
-export async function getActivePlanByUser(userId: string): Promise<{ plan_id: string; start_date: string; is_active: boolean } | null> {
+/** Get friend's active plan with denormalized plan data */
+export async function getActivePlanByUser(userId: string): Promise<{
+  plan_id: string;
+  start_date: string;
+  is_active: boolean;
+  plan_name?: string;
+  plan_description?: string;
+  race_type?: string;
+  difficulty?: string;
+  duration_weeks?: number;
+  plan_days_json?: any[];
+} | null> {
   const { data } = await supabase
     .from('active_plans')
-    .select('plan_id, start_date, is_active')
+    .select('plan_id, start_date, is_active, plan_name, plan_description, race_type, difficulty, duration_weeks, plan_days_json')
     .eq('user_id', userId)
     .eq('is_active', true)
-    .single();
+    .maybeSingle();
   return data ?? null;
 }
 
-/** Get friend's training plan by ID */
+/** Get friend's training plan by ID (fallback if denormalized data not available) */
 export async function getTrainingPlanById(planId: string): Promise<TrainingPlan | null> {
   const { data } = await supabase
     .from('training_plans')
     .select('*')
     .eq('id', planId)
-    .single();
+    .maybeSingle();
   return data ?? null;
 }
 

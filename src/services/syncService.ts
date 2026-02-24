@@ -11,6 +11,7 @@ import type Database from '@tauri-apps/plugin-sql';
 import { supabase } from './supabaseClient';
 import type { Run, Goal, ActivePlan, TrainingPlan, PlanDay, SyncQueueItem } from '../types';
 import { saveSettings } from './settingsService';
+import { getPlanById, getPlanDays } from './planService';
 
 export async function syncToCloud(db: Database): Promise<void> {
   const { data: { session } } = await supabase.auth.getSession();
@@ -134,6 +135,23 @@ async function pushDirtyActivePlan(db: Database, userId: string): Promise<void> 
       await ensurePlanInSupabase(db, ap.plan_id, userId);
     }
     
+    // Fetch plan details to denormalize into active_plans
+    const plan = await getPlanById(db, ap.plan_id);
+    const planDays = plan ? await getPlanDays(db, ap.plan_id) : [];
+    
+    // Convert plan_days to JSON
+    const planDaysJson = planDays.map(pd => ({
+      id: pd.id,
+      week_number: pd.week_number,
+      day_of_week: pd.day_of_week,
+      activity_type: pd.activity_type,
+      distance_value: pd.distance_value,
+      distance_unit: pd.distance_unit,
+      duration_minutes: pd.duration_minutes,
+      description: pd.description,
+      workout_segments: pd.workout_segments,
+    }));
+    
     const { error } = await supabase.from('active_plans').upsert({
       id: ap.id,
       user_id: userId,
@@ -141,6 +159,13 @@ async function pushDirtyActivePlan(db: Database, userId: string): Promise<void> 
       start_date: ap.start_date,
       is_active: ap.is_active,
       created_at: ap.created_at,
+      // Denormalized plan data
+      plan_name: plan?.name ?? null,
+      plan_description: plan?.description ?? null,
+      race_type: plan?.race_type ?? null,
+      difficulty: plan?.difficulty ?? null,
+      duration_weeks: plan?.duration_weeks ?? null,
+      plan_days_json: planDaysJson.length > 0 ? planDaysJson : null,
     });
     if (error) {
       console.error('Failed to sync active plan', ap.id, error.message);

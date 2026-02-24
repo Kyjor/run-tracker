@@ -187,8 +187,8 @@ export async function getActivePlan(db: Database): Promise<ActivePlan | null> {
 
 export async function setActivePlan(db: Database, planId: string, startDate: string): Promise<void> {
   const now = new Date().toISOString();
-  // Deactivate any existing active plan
-  await db.execute("UPDATE active_plan SET is_active = 0");
+  // Deactivate any existing active plan and mark as dirty so it syncs
+  await db.execute("UPDATE active_plan SET is_active = 0, sync_status='dirty' WHERE is_active = 1");
   // Check if this plan already has an active_plan row
   const existing = await db.select<ActivePlan[]>(
     'SELECT * FROM active_plan WHERE plan_id = $1',
@@ -206,6 +206,23 @@ export async function setActivePlan(db: Database, planId: string, startDate: str
        VALUES ($1,$2,$3,1,$4,'dirty')`,
       [id, planId, startDate, now],
     );
+  }
+
+  // Publish feed activity and sync to cloud
+  const plan = await getPlanById(db, planId);
+  if (plan) {
+    const { publishFeedActivity } = await import('./socialService');
+    await publishFeedActivity('plan_started', {
+      plan_id: planId,
+      plan_name: plan.name,
+      start_date: startDate,
+    });
+
+    // Trigger immediate sync so friends can see the active plan
+    const { syncToCloud } = await import('./syncService');
+    syncToCloud(db).catch((e) => {
+      console.error('Failed to sync active plan after activation:', e);
+    });
   }
 }
 
