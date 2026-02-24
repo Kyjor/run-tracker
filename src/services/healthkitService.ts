@@ -4,6 +4,8 @@ import { createRun } from './runService';
 import type Database from '@tauri-apps/plugin-sql';
 import { format, parseISO } from 'date-fns';
 import { generateId } from '../utils/generateId';
+import { syncToCloud } from './syncService';
+import { publishFeedActivity } from './socialService';
 
 const HEALTHKIT_DEBUG_KEY = 'healthkit_debug_logs';
 const HEALTHKIT_DEBUG_MAX = 300;
@@ -74,6 +76,8 @@ export interface WorkoutDetails {
   hr_zone_4_seconds?: number;
   hr_zone_5_seconds?: number;
   min_heart_rate?: number;
+  average_heart_rate?: number;
+  max_heart_rate?: number;
 
   // Cadence & form
   average_cadence?: number;                 // steps/min
@@ -154,7 +158,7 @@ export async function workoutExists(
   if (!workout.distance_meters) return false;
   const runDate = format(parseISO(workout.start_date), 'yyyy-MM-dd');
   const existing = await db.select<Run[]>(
-    'SELECT distance_value, duration_seconds FROM runs WHERE date = $1 AND source = $2',
+    "SELECT distance_value, duration_seconds FROM runs WHERE substr(date, 1, 10) = $1 AND source = $2",
     [runDate, 'healthkit'],
   );
   const distanceValue = units === 'mi'
@@ -246,8 +250,8 @@ export async function importHealthKitWorkout(
       source: 'healthkit',
 
       // HR
-      avg_heart_rate: workout.average_heart_rate ?? null,
-      max_heart_rate: workout.max_heart_rate ?? null,
+      avg_heart_rate: details.average_heart_rate ?? workout.average_heart_rate ?? null,
+      max_heart_rate: details.max_heart_rate ?? workout.max_heart_rate ?? null,
       min_heart_rate: details.min_heart_rate ?? null,
       hr_zones: hrZonesJson,
 
@@ -277,6 +281,23 @@ export async function importHealthKitWorkout(
       calories: workout.energy_burned_kcal ?? null,
 
       has_route: hasRoute,
+    });
+
+    // Publish an activity so imported workouts appear in social feed.
+    // This is idempotent because publishFeedActivity dedupes run_completed by run_id.
+    await publishFeedActivity('run_completed', {
+      distance: Math.round(distanceValue * 100) / 100,
+      unit: units,
+      duration: Math.round(workout.duration_seconds),
+      run_type: inferRunType(workout, units),
+      run_id: workout.id,
+      run_date: format(parseISO(workout.start_date), 'yyyy-MM-dd'),
+    });
+
+    // Push the new run up to Supabase in the background so it's available
+    // for stats, feed construction, and other devices.
+    syncToCloud(db).catch(() => {
+      // Non-fatal; user can still sync manually if this fails.
     });
 
     // If route data exists, persist it separately

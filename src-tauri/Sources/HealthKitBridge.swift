@@ -28,6 +28,8 @@ struct WorkoutDetailsJSON: Codable {
     var hr_zone_4_seconds: Double?
     var hr_zone_5_seconds: Double?
     var min_heart_rate: Double?
+    var average_heart_rate: Double?
+    var max_heart_rate: Double?
     var average_cadence: Double?
     var average_stride_length_meters: Double?
     var average_ground_contact_time_ms: Double?
@@ -248,6 +250,10 @@ public func fetchWorkoutDetails(
         if !samples.isEmpty {
             let values = samples.map { $0.quantity.doubleValue(for: HKUnit(from: "count/min")) }
             details.min_heart_rate = values.min()
+            // Compute average / max HR from samples
+            let avg = values.reduce(0, +) / Double(values.count)
+            details.average_heart_rate = avg
+            details.max_heart_rate = values.max()
             let effectiveMax = maxHR > 0 ? maxHR : (values.max() ?? 190)
             details.hr_zone_1_seconds = 0; details.hr_zone_2_seconds = 0
             details.hr_zone_3_seconds = 0; details.hr_zone_4_seconds = 0
