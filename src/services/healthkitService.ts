@@ -313,8 +313,17 @@ export async function importHealthKitWorkout(
     appendHealthKitDebug('info', `Import successful for ${workout.id}`);
     return { success: true };
   } catch (error) {
-    appendHealthKitDebug('error', `Import failed for ${workout.id}: ${error instanceof Error ? error.message : String(error)}`);
-    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    const message = error instanceof Error ? error.message : String(error);
+
+    // If the DB insert failed due to UNIQUE constraint on runs.id, treat as
+    // \"already imported\" instead of surfacing a scary unknown error.
+    if (message.includes('UNIQUE constraint failed: runs.id')) {
+      appendHealthKitDebug('info', `Import skipped for ${workout.id}: run ID already exists (treating as already imported)`);
+      return { success: false, error: 'Workout already imported' };
+    }
+
+    appendHealthKitDebug('error', `Import failed for ${workout.id}: ${message}`);
+    return { success: false, error: message || 'Unknown error' };
   }
 }
 

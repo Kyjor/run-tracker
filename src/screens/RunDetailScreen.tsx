@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import type { Run } from '../types';
 import { RUN_TYPE_LABELS, ACTIVITY_COLORS } from '../types';
 import { Header } from '../components/navigation/Header';
@@ -7,25 +7,55 @@ import { Spinner } from '../components/ui/Spinner';
 import { RunMetricsDisplay } from '../components/run/RunMetricsDisplay';
 import { useDb } from '../contexts/DatabaseContext';
 import { useSettings } from '../contexts/SettingsContext';
+import { useAuth } from '../contexts/AuthContext';
 import { getRunById } from '../services/runService';
+import { getRunByUserAndId, getProfileById } from '../services/socialService';
 import { formatDistance, formatDuration, formatPace, calcPaceSeconds } from '../utils/paceUtils';
 import { formatLong } from '../utils/dateUtils';
 
 export function RunDetailScreen() {
   const { id } = useParams<{ id: string }>();
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const db = useDb();
   const { settings } = useSettings();
+  const { user } = useAuth();
 
   const [run, setRun] = useState<Run | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isFriendRun, setIsFriendRun] = useState(false);
+  const [friendName, setFriendName] = useState<string | null>(null);
 
   useEffect(() => {
     if (!id) return;
-    getRunById(db, id)
-      .then(r => setRun(r))
-      .finally(() => setLoading(false));
-  }, [db, id]);
+    
+    const userId = searchParams.get('userId');
+    const isOwnRun = !userId || userId === user?.id;
+    
+    setIsFriendRun(!isOwnRun);
+    
+    if (isOwnRun) {
+      // Fetch from local DB
+      getRunById(db, id)
+        .then(r => setRun(r))
+        .finally(() => setLoading(false));
+    } else {
+      // Fetch friend's run from Supabase
+      Promise.all([
+        getRunByUserAndId(userId, id),
+        getProfileById(userId),
+      ])
+        .then(([r, profile]) => {
+          setRun(r);
+          setFriendName(profile?.display_name ?? null);
+        })
+        .catch(() => {
+          setRun(null);
+          setFriendName(null);
+        })
+        .finally(() => setLoading(false));
+    }
+  }, [db, id, searchParams, user]);
 
   if (loading) {
     return (
@@ -61,12 +91,14 @@ export function RunDetailScreen() {
         title="Run Details"
         showBack
         rightAction={
-          <button
-            className="text-sm text-primary-500 font-medium pr-1"
-            onClick={() => navigate(`/log/edit/${run.id}`)}
-          >
-            Edit
-          </button>
+          !isFriendRun ? (
+            <button
+              className="text-sm text-primary-500 font-medium pr-1"
+              onClick={() => navigate(`/log/edit/${run.id}`)}
+            >
+              Edit
+            </button>
+          ) : null
         }
       />
 
@@ -89,7 +121,10 @@ export function RunDetailScreen() {
                 <h2 className="text-lg font-bold text-gray-900 dark:text-white">
                   {RUN_TYPE_LABELS[run.run_type] ?? 'Run'}
                 </h2>
-                <p className="text-sm text-gray-400">{formatLong(run.date)}</p>
+                <p className="text-sm text-gray-400">
+                  {isFriendRun && friendName ? `${friendName}'s run · ` : ''}
+                  {formatLong(run.date)}
+                </p>
               </div>
               {run.source === 'healthkit' && (
                 <span className="ml-auto text-xs bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 px-2 py-1 rounded-full">

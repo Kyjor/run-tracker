@@ -121,6 +121,17 @@ export async function getRunsByUser(userId: string, limit = 20): Promise<Run[]> 
   return (data ?? []) as Run[];
 }
 
+/** Fetch a single run by ID for any user from Supabase */
+export async function getRunByUserAndId(userId: string, runId: string): Promise<Run | null> {
+  const { data } = await supabase
+    .from('user_runs')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('id', runId)
+    .single();
+  return (data ?? null) as Run | null;
+}
+
 /** Fetch all runs for a user (for stats calculation) */
 export async function getAllRunsByUser(userId: string): Promise<Run[]> {
   const { data } = await supabase

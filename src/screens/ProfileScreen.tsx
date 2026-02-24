@@ -12,7 +12,7 @@ import { useSettings } from '../contexts/SettingsContext';
 import { useDb } from '../contexts/DatabaseContext';
 import { useToast } from '../contexts/ToastContext';
 import { getRunStats } from '../services/statsService';
-import { getMyProfile, updateProfile } from '../services/socialService';
+import { getMyProfile, updateProfile, getFollowing, getFollowers } from '../services/socialService';
 import type { Profile } from '../types';
 import { RACE_TYPE_LABELS } from '../types';
 import { formatDistance } from '../utils/paceUtils';
@@ -27,6 +27,8 @@ export function ProfileScreen() {
   const [allTimeDistance, setAllTimeDistance] = useState(0);
   const [totalRuns, setTotalRuns] = useState(0);
   const [streak, setStreak] = useState(0);
+  const [followingCount, setFollowingCount] = useState(0);
+  const [followersCount, setFollowersCount] = useState(0);
 
   // Profile editing
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -48,6 +50,16 @@ export function ProfileScreen() {
       getMyProfile().then(p => {
         if (p) setProfile(p);
       });
+      // Load following/followers counts for profile header
+      (async () => {
+        try {
+          const [following, followers] = await Promise.all([getFollowing(), getFollowers()]);
+          setFollowingCount(following.length);
+          setFollowersCount(followers.length);
+        } catch {
+          // ignore count errors; not critical for UI
+        }
+      })();
     }
   }, [user]);
 
@@ -86,7 +98,12 @@ export function ProfileScreen() {
 
       <div className="px-4 pt-4 flex flex-col gap-4">
         {/* User info */}
-        <Card>
+        <Card
+          className={user ? 'cursor-pointer' : undefined}
+          onClick={() => {
+            if (user) navigate(`/social/profile/${user.id}`);
+          }}
+        >
           <div className="flex items-center gap-4 mb-4">
             <div className="w-14 h-14 bg-primary-100 dark:bg-primary-900/40 rounded-full flex items-center justify-center text-2xl">
               {user ? user.email?.[0].toUpperCase() : '🏃'}
@@ -99,6 +116,12 @@ export function ProfileScreen() {
               {profile && (
                 <p className="text-xs text-gray-400 mt-0.5">
                   {profile.is_public ? '🌐 Public profile' : '🔒 Private profile'}
+                </p>
+              )}
+              {user && (
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                  <span className="font-semibold">{followingCount}</span> following ·{' '}
+                  <span className="font-semibold">{followersCount}</span> followers
                 </p>
               )}
             </div>

@@ -4,7 +4,7 @@ import type { Run } from '../../types';
 import { RUN_TYPE_LABELS, ACTIVITY_COLORS } from '../../types';
 import { Card } from '../ui/Card';
 import { CommentModal } from '../social/CommentModal';
-import { formatShort } from '../../utils/dateUtils';
+import { formatRelativeTime } from '../../utils/dateUtils';
 import { formatDistance, formatDuration, formatPace, calcPaceSeconds } from '../../utils/paceUtils';
 import { getFeedActivityIdByRunId } from '../../services/socialService';
 import { useAuth } from '../../contexts/AuthContext';
@@ -74,7 +74,7 @@ export function RunCard({ run, onClick }: RunCardProps) {
               <span className="text-sm font-semibold text-gray-900 dark:text-white">
                 {RUN_TYPE_LABELS[run.run_type] ?? 'Run'}
               </span>
-              <span className="text-xs text-gray-400">{formatShort(run.date)}</span>
+              <span className="text-xs text-gray-400">{formatRelativeTime(run.date, false)}</span>
             </div>
             <div className="flex gap-3 mt-0.5">
               <span className="text-xs text-gray-600 dark:text-gray-400">

@@ -102,8 +102,9 @@ export async function createRun(db: Database, input: CreateRunInput): Promise<Ru
   const id = input.id ?? generateId();
   const now = new Date().toISOString();
   
-  // Convert date-only input to datetime (use current time if not provided)
-  const runDate = input.date.includes('T') 
+  // For HealthKit imports, always use the provided datetime as-is (it's already ISO 8601 from HealthKit)
+  // For manual entries, convert date-only to datetime (use current time if not provided)
+  const runDate = input.source === 'healthkit' || input.date.includes('T')
     ? input.date 
     : dateToDatetime(input.date, new Date().toISOString().split('T')[1].split('.')[0] + 'Z');
 

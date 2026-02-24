@@ -1,6 +1,6 @@
 [package]
 name = "run-with-friends"
-version = "0.3.4"
+version = "0.3.5"
 description = "Run With Friends - Training Plan & Run Tracker"
 authors = ["you"]
 edition = "2021"

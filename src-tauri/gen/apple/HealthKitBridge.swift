@@ -54,7 +54,11 @@ struct RoutePoint: Codable {
 // ---------------------------------------------------------------------------
 
 private let healthStore = HKHealthStore()
-nonisolated(unsafe) private let iso8601 = ISO8601DateFormatter()
+nonisolated(unsafe) private let iso8601: ISO8601DateFormatter = {
+    let formatter = ISO8601DateFormatter()
+    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    return formatter
+}()
 
 // ---------------------------------------------------------------------------
 // Request authorization

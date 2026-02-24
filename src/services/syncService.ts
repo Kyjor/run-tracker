@@ -9,7 +9,7 @@
 
 import type Database from '@tauri-apps/plugin-sql';
 import { supabase } from './supabaseClient';
-import type { Run, Goal, ActivePlan, TrainingPlan, SyncQueueItem } from '../types';
+import type { Run, Goal, ActivePlan, TrainingPlan, PlanDay, SyncQueueItem } from '../types';
 import { saveSettings } from './settingsService';
 
 export async function syncToCloud(db: Database): Promise<void> {
@@ -129,6 +129,9 @@ async function pushDirtyActivePlan(db: Database, userId: string): Promise<void> 
         .update({ is_active: false })
         .eq('user_id', userId)
         .eq('is_active', true);
+      
+      // Ensure the plan and its plan_days exist in Supabase (for built-in plans)
+      await ensurePlanInSupabase(db, ap.plan_id, userId);
     }
     
     const { error } = await supabase.from('active_plans').upsert({
@@ -147,6 +150,87 @@ async function pushDirtyActivePlan(db: Database, userId: string): Promise<void> 
   }
 }
 
+/**
+ * Ensures a training plan and its plan_days exist in Supabase.
+ * This is needed for built-in plans so friends can view them.
+ */
+async function ensurePlanInSupabase(db: Database, planId: string, userId: string): Promise<void> {
+  // Check if plan exists in Supabase
+  const { data: existingPlan } = await supabase
+    .from('training_plans')
+    .select('id')
+    .eq('id', planId)
+    .maybeSingle();
+  
+  if (existingPlan) {
+    // Plan exists, check if plan_days exist
+    const { data: existingDays } = await supabase
+      .from('plan_days')
+      .select('id')
+      .eq('plan_id', planId)
+      .limit(1);
+    
+    if (existingDays && existingDays.length > 0) {
+      // Plan and days already exist, nothing to do
+      return;
+    }
+  }
+  
+  // Plan or plan_days don't exist, fetch from local DB and sync
+  const localPlan = await db.select<TrainingPlan[]>(
+    'SELECT * FROM training_plans WHERE id = $1',
+    [planId],
+  );
+  
+  if (localPlan.length === 0) return;
+  
+  const plan = localPlan[0];
+  
+  // Upsert the plan (built-in plans have user_id = null)
+  const { error: planError } = await supabase.from('training_plans').upsert({
+    id: plan.id,
+    user_id: plan.is_builtin ? null : userId,
+    name: plan.name,
+    description: plan.description,
+    race_type: plan.race_type,
+    difficulty: plan.difficulty,
+    duration_weeks: plan.duration_weeks,
+    is_builtin: plan.is_builtin === 1,
+    created_at: plan.created_at,
+  });
+  
+  if (planError) {
+    console.error('Failed to sync plan to Supabase', plan.id, planError.message);
+    return;
+  }
+  
+  // Fetch plan_days from local DB
+  const localDays = await db.select<PlanDay[]>(
+    'SELECT * FROM plan_days WHERE plan_id = $1',
+    [planId],
+  );
+  
+  // Upsert all plan_days
+  for (const day of localDays) {
+    const { error: dayError } = await supabase.from('plan_days').upsert({
+      id: day.id,
+      plan_id: day.plan_id,
+      week_number: day.week_number,
+      day_of_week: day.day_of_week,
+      activity_type: day.activity_type,
+      distance_value: day.distance_value,
+      distance_unit: day.distance_unit,
+      duration_minutes: day.duration_minutes,
+      description: day.description,
+      workout_segments: day.workout_segments ?? null,
+    });
+    
+    if (dayError) {
+      console.error('Failed to sync plan_day to Supabase', day.id, dayError.message);
+    }
+  }
+}
+
 async function pushDirtyCustomPlans(db: Database, userId: string): Promise<void> {
   const dirty = await db.select<TrainingPlan[]>(
     "SELECT * FROM training_plans WHERE sync_status != 'synced' AND is_builtin = 0",
@@ -160,11 +244,37 @@ async function pushDirtyCustomPlans(db: Database, userId: string): Promise<void>
       race_type: plan.race_type,
       difficulty: plan.difficulty,
       duration_weeks: plan.duration_weeks,
+      is_builtin: false,
       created_at: plan.created_at,
     });
     if (error) {
       console.error('Failed to sync plan', plan.id, error.message);
     } else {
+      // Sync plan_days for this custom plan
+      const planDays = await db.select<PlanDay[]>(
+        'SELECT * FROM plan_days WHERE plan_id = $1',
+        [plan.id],
+      );
+      
+      for (const day of planDays) {
+        const { error: dayError } = await supabase.from('plan_days').upsert({
+          id: day.id,
+          plan_id: day.plan_id,
+          week_number: day.week_number,
+          day_of_week: day.day_of_week,
+          activity_type: day.activity_type,
+          distance_value: day.distance_value,
+          distance_unit: day.distance_unit,
+          duration_minutes: day.duration_minutes,
+          description: day.description,
+          workout_segments: day.workout_segments ?? null,
+        });
+        
+        if (dayError) {
+          console.error('Failed to sync plan_day', day.id, dayError.message);
+        }
+      }
+      
       await db.execute("UPDATE training_plans SET sync_status='synced' WHERE id=$1", [plan.id]);
     }
   }

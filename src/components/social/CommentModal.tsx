@@ -8,7 +8,7 @@ import { getComments, addComment } from '../../services/socialService';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import type { FeedComment } from '../../types';
-import { formatShort } from '../../utils/dateUtils';
+import { formatRelativeTime } from '../../utils/dateUtils';
 
 interface CommentModalProps {
   isOpen: boolean;
@@ -104,7 +104,7 @@ export function CommentModal({ isOpen, onClose, activityId, onCommentAdded }: Co
                       {(comment.profile as { display_name?: string })?.display_name ?? 'Someone'}
                     </p>
                     <p className="text-sm text-gray-700 dark:text-gray-300 mt-0.5">{comment.text}</p>
-                    <p className="text-xs text-gray-400 mt-1">{formatShort(comment.created_at)}</p>
+                    <p className="text-xs text-gray-400 mt-1">{formatRelativeTime(comment.created_at, true)}</p>
                   </div>
                 </div>
               ))}

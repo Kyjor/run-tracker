@@ -7,7 +7,10 @@ import {
   endOfMonth,
   eachDayOfInterval,
   differenceInCalendarDays,
+  differenceInMinutes,
+  differenceInHours,
   isToday,
+  isYesterday,
   isSameDay,
   isAfter,
   isBefore,
@@ -55,6 +58,32 @@ export function formatShort(iso: string): string {
 /** 'Nov 22 at 3:45 PM' */
 export function formatShortWithTime(iso: string): string {
   return format(parseISO(iso), 'MMM d \'at\' h:mm a');
+}
+
+/**
+ * Format relative time for feed/comments:
+ * - Within today: "5 min ago", "5 hours ago"
+ * - Yesterday: "Yesterday @ 5:22PM"
+ * - Before yesterday: "Nov 22 at 3:45 PM" (or "Nov 22" if no time needed)
+ */
+export function formatRelativeTime(iso: string, includeTime = true): string {
+  const date = parseISO(iso);
+  const now = new Date();
+
+  if (isToday(date)) {
+    const minutesAgo = differenceInMinutes(now, date);
+    if (minutesAgo < 1) return 'just now';
+    if (minutesAgo < 60) return `${minutesAgo} min ago`;
+    const hoursAgo = differenceInHours(now, date);
+    return `${hoursAgo} hour${hoursAgo === 1 ? '' : 's'} ago`;
+  }
+
+  if (isYesterday(date)) {
+    return `Yesterday @ ${format(date, 'h:mm a')}`;
+  }
+
+  // Before yesterday: use existing format
+  return includeTime ? formatShortWithTime(iso) : formatShort(iso);
 }
 
 /** 'November 22, 2025' */

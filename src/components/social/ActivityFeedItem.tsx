@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import type { FeedItem } from '../../types';
 import { Card } from '../ui/Card';
 import { CommentModal } from './CommentModal';
-import { formatShortWithTime } from '../../utils/dateUtils';
+import { formatRelativeTime } from '../../utils/dateUtils';
 import { parseISO } from 'date-fns';
 import { formatDistance, formatDuration } from '../../utils/paceUtils';
 
@@ -86,9 +86,9 @@ export function ActivityFeedItem({ item, onLike, onCommentAdded }: ActivityFeedI
                     const createdTime = parseISO(item.created_at);
                     const combined = new Date(runDate);
                     combined.setHours(createdTime.getHours(), createdTime.getMinutes(), createdTime.getSeconds());
-                    return formatShortWithTime(combined.toISOString());
+                    return formatRelativeTime(combined.toISOString(), true);
                   })()
-                : formatShortWithTime(item.created_at)}
+                : formatRelativeTime(item.created_at, true)}
             </p>
           </div>
         </div>
@@ -110,6 +110,14 @@ export function ActivityFeedItem({ item, onLike, onCommentAdded }: ActivityFeedI
             <span>💬</span>
             {item.comments_count ?? 0}
           </button>
+          {item.activity_type === 'run_completed' && typeof d.run_id === 'string' && d.run_id && (
+            <button
+              onClick={() => navigate(`/runs/${d.run_id}?userId=${item.user_id}`)}
+              className="flex items-center gap-1.5 text-xs text-primary-500 dark:text-primary-400"
+            >
+              <span>View Details</span>
+            </button>
+          )}
         </div>
       </div>
 

@@ -355,7 +355,7 @@ export function DashboardScreen() {
           ) : (
             <div className="flex flex-col gap-2">
               {recentRuns.map(r => (
-                <RunCard key={r.id} run={r} onClick={() => navigate(`/log/edit/${r.id}`)} />
+                <RunCard key={r.id} run={r} onClick={() => navigate(`/runs/${r.id}`)} />
               ))}
             </div>
           )}
