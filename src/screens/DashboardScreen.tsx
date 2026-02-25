@@ -205,7 +205,7 @@ export function DashboardScreen() {
   return (
     <div className="flex flex-col flex-1 overflow-hidden">
       <Header
-        title={`Good ${getGreeting()}, Runner`}
+        title={`Good ${getGreeting()}, ${user?.user_metadata?.display_name ?? user?.email?.split('@')[0] ?? 'Runner'}`}
         subtitle={format(new Date(), 'EEEE, MMMM d')}
       />
 
@@ -350,7 +350,7 @@ export function DashboardScreen() {
               emoji="👟"
               title="No runs yet"
               description="Log your first run to start tracking your progress."
-              action={<Button size="sm" onClick={() => navigate('/log')}>Log a Run</Button>}
+              action={<Button size="sm" onClick={() => navigate('/log/manual')}>Log a Run</Button>}
             />
           ) : (
             <div className="flex flex-col gap-2">

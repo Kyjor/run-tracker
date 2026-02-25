@@ -1,4 +1,5 @@
 import { useNavigate } from 'react-router-dom';
+import { NotificationsBell } from '../notifications/NotificationsBell';
 
 interface HeaderProps {
   title: string;
@@ -6,9 +7,10 @@ interface HeaderProps {
   showBack?: boolean;
   rightAction?: React.ReactNode;
   transparent?: boolean;
+  showNotifications?: boolean;
 }
 
-export function Header({ title, subtitle, showBack, rightAction, transparent }: HeaderProps) {
+export function Header({ title, subtitle, showBack, rightAction, transparent, showNotifications = true }: HeaderProps) {
   const navigate = useNavigate();
 
   return (
@@ -34,7 +36,10 @@ export function Header({ title, subtitle, showBack, rightAction, transparent }: 
           <p className="text-sm text-gray-500 dark:text-gray-400">{subtitle}</p>
         )}
       </div>
-      {rightAction}
+      <div className="flex items-center gap-1">
+        {showNotifications && <NotificationsBell />}
+        {rightAction}
+      </div>
     </div>
   );
 }

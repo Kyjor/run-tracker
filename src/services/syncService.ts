@@ -90,10 +90,52 @@ async function pushDirtyRuns(db: Database, userId: string): Promise<void> {
       source: run.source,
       created_at: run.created_at,
       updated_at: run.updated_at,
+      // Health metrics (nullable)
+      avg_heart_rate: run.avg_heart_rate,
+      max_heart_rate: run.max_heart_rate,
+      min_heart_rate: run.min_heart_rate,
+      hr_zones: run.hr_zones,
+      avg_cadence: run.avg_cadence,
+      avg_stride_length_meters: run.avg_stride_length_meters,
+      avg_ground_contact_time_ms: run.avg_ground_contact_time_ms,
+      avg_vertical_oscillation_cm: run.avg_vertical_oscillation_cm,
+      avg_power_watts: run.avg_power_watts,
+      max_power_watts: run.max_power_watts,
+      elevation_gain_meters: run.elevation_gain_meters,
+      elevation_loss_meters: run.elevation_loss_meters,
+      vo2_max: run.vo2_max,
+      temperature_celsius: run.temperature_celsius,
+      humidity_percent: run.humidity_percent,
+      weather_condition: run.weather_condition,
+      calories: run.calories,
     });
     if (error) {
       console.error('Failed to sync run', run.id, error.message);
     } else {
+      // If this run has a GPS route, sync it to user_run_routes as well
+      if (run.has_route) {
+        try {
+          const routes = await db.select<{ id: string; points_json: string; created_at: string }[]>(
+            'SELECT id, points_json, created_at FROM run_routes WHERE run_id = $1 LIMIT 1',
+            [run.id],
+          );
+          const route = routes[0];
+          if (route) {
+            const { error: routeError } = await supabase.from('user_run_routes').upsert({
+              id: route.id,
+              user_id: userId,
+              run_id: run.id,
+              points_json: route.points_json,
+              created_at: route.created_at,
+            });
+            if (routeError) {
+              console.error('Failed to sync run route', run.id, routeError.message);
+            }
+          }
+        } catch (e) {
+          console.error('Error reading local run route for sync', run.id, e);
+        }
+      }
       await db.execute("UPDATE runs SET sync_status='synced' WHERE id=$1", [run.id]);
     }
   }
@@ -322,10 +364,94 @@ export async function pullFromCloud(db: Database): Promise<void> {
       if (existing.length === 0) {
         await db.execute(
           `INSERT INTO runs
-            (id, date, distance_value, distance_unit, duration_seconds, run_type, plan_day_id, notes, source, created_at, updated_at, sync_status)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'synced')`,
-          [run.id, run.date, run.distance_value, run.distance_unit, run.duration_seconds,
-           run.run_type, run.plan_day_id, run.notes, run.source, run.created_at, run.updated_at],
+            (id, date, distance_value, distance_unit, duration_seconds, run_type,
+             plan_day_id, notes, source,
+             avg_heart_rate, max_heart_rate, min_heart_rate, hr_zones,
+             avg_cadence, avg_stride_length_meters, avg_ground_contact_time_ms, avg_vertical_oscillation_cm,
+             avg_power_watts, max_power_watts,
+             elevation_gain_meters, elevation_loss_meters,
+             vo2_max,
+             temperature_celsius, humidity_percent, weather_condition,
+             calories, has_route,
+             created_at, updated_at, sync_status)
+           VALUES (
+             $1,$2,$3,$4,$5,$6,
+             $7,$8,$9,
+             $10,$11,$12,$13,
+             $14,$15,$16,$17,
+             $18,$19,
+             $20,$21,
+             $22,
+             $23,$24,$25,
+             $26,$27,
+             $28,$29,'synced'
+           )`,
+          [
+            run.id,
+            run.date,
+            run.distance_value,
+            run.distance_unit,
+            run.duration_seconds,
+            run.run_type,
+            run.plan_day_id,
+            run.notes,
+            run.source,
+            // metrics (may be undefined)
+            run.avg_heart_rate ?? null,
+            run.max_heart_rate ?? null,
+            run.min_heart_rate ?? null,
+            run.hr_zones ?? null,
+            run.avg_cadence ?? null,
+            run.avg_stride_length_meters ?? null,
+            run.avg_ground_contact_time_ms ?? null,
+            run.avg_vertical_oscillation_cm ?? null,
+            run.avg_power_watts ?? null,
+            run.max_power_watts ?? null,
+            run.elevation_gain_meters ?? null,
+            run.elevation_loss_meters ?? null,
+            run.vo2_max ?? null,
+            run.temperature_celsius ?? null,
+            run.humidity_percent ?? null,
+            run.weather_condition ?? null,
+            run.calories ?? null,
+            0, // has_route is local-only for now
+            run.created_at,
+            run.updated_at,
+          ],
+        );
+      }
+    }
+  }
+
+  // Pull GPS routes
+  const { data: remoteRoutes } = await supabase
+    .from('user_run_routes')
+    .select('*')
+    .eq('user_id', session.user.id);
+
+  if (remoteRoutes) {
+    for (const route of remoteRoutes as { id: string; run_id: string; points_json: string; created_at: string }[]) {
+      const existingRoute = await db.select<{ id: string }[]>(
+        'SELECT id FROM run_routes WHERE id = $1',
+        [route.id],
+      );
+      if (existingRoute.length === 0) {
+        // Only insert route if the corresponding run exists locally
+        const runExists = await db.select<Run[]>(
+          'SELECT id FROM runs WHERE id = $1',
+          [route.run_id],
+        );
+        if (runExists.length === 0) continue;
+
+        await db.execute(
+          'INSERT INTO run_routes (id, run_id, points_json, created_at) VALUES ($1,$2,$3,$4)',
+          [route.id, route.run_id, route.points_json, route.created_at],
+        );
+
+        // Mark the run as having a route
+        await db.execute(
+          'UPDATE runs SET has_route = 1 WHERE id = $1',
+          [route.run_id],
         );
       }
     }

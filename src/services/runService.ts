@@ -1,5 +1,5 @@
 import type Database from '@tauri-apps/plugin-sql';
-import type { Run, RunType, DistanceUnit } from '../types';
+import type { Run, RunType, DistanceUnit, RoutePoint } from '../types';
 import { generateId } from '../utils/generateId';
 import { supabase } from './supabaseClient';
 import { dateToDatetime } from '../utils/dateUtils';
@@ -257,6 +257,22 @@ export async function deleteRun(db: Database, id: string): Promise<void> {
   
   // Delete locally (always delete locally, even if cloud delete failed)
   await db.execute('DELETE FROM runs WHERE id = $1', [id]);
+}
+
+/** Fetch GPS route points for a run, if any exist. */
+export async function getRouteForRun(db: Database, runId: string): Promise<RoutePoint[] | null> {
+  const rows = await db.select<{ points_json: string }[]>(
+    'SELECT points_json FROM run_routes WHERE run_id = $1 LIMIT 1',
+    [runId],
+  );
+  const raw = rows[0]?.points_json;
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as RoutePoint[];
+    return Array.isArray(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
 }
 
 /** Returns the run logged for a specific plan day, or null. */

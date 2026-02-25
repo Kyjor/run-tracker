@@ -9,6 +9,7 @@ import { SettingsProvider, useSettings } from './contexts/SettingsContext';
 import { ToastProvider } from './contexts/ToastContext';
 import { AuthProvider } from './contexts/AuthContext';
 import { PlanProvider } from './contexts/PlanContext';
+import { useDailyTrainingReminder } from './hooks/useDailyTrainingReminder';
 
 // Layout
 import { TabBar } from './components/navigation/TabBar';
@@ -35,6 +36,8 @@ import { FriendProfileScreen } from './screens/FriendProfileScreen';
 import { SharePlanScreen } from './screens/SharePlanScreen';
 import { CommunityPlanDetailScreen } from './screens/CommunityPlanDetailScreen';
 import { RunDetailScreen } from './screens/RunDetailScreen';
+import { LogEntryScreen } from './screens/LogEntryScreen';
+import { LiveRunScreen } from './screens/LiveRunScreen';
 
 // ---------------------------------------------------------------------------
 // Gate: show splash until DB is ready, redirect to onboarding if needed
@@ -47,6 +50,9 @@ function AppShell() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+
+  // Local daily training reminder (simple, app-local)
+  useDailyTrainingReminder();
 
   // Auto-sync on startup when logged in
   useEffect(() => {
@@ -69,7 +75,7 @@ function AppShell() {
   }, [isLoaded, settings.onboarding_complete, user, location.pathname]);
 
   if (!isReady || !isLoaded) {
-    return (
+        return (
       <div className="min-h-screen bg-white dark:bg-gray-900 flex items-center justify-center flex-col gap-4">
         {error ? (
           <p className="text-red-500 text-sm px-4 text-center">Database error: {error}</p>
@@ -79,8 +85,8 @@ function AppShell() {
             <Spinner size="lg" className="text-primary-500" />
           </>
         )}
-      </div>
-    );
+          </div>
+        );
   }
 
   const isTabRoute =
@@ -106,8 +112,10 @@ function AppShell() {
           {/* Main tabs */}
           <Route path="/home" element={<DashboardScreen />} />
           <Route path="/calendar" element={<CalendarScreen />} />
-          <Route path="/log" element={<LogRunScreen />} />
+          <Route path="/log" element={<LogEntryScreen />} />
+          <Route path="/log/manual" element={<LogRunScreen />} />
           <Route path="/log/edit/:id" element={<LogRunScreen />} />
+          <Route path="/log/live" element={<LiveRunScreen />} />
           <Route path="/runs/:id" element={<RunDetailScreen />} />
           <Route path="/stats" element={<StatsScreen />} />
           <Route path="/profile" element={<ProfileScreen />} />

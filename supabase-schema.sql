@@ -63,6 +63,16 @@ CREATE TABLE IF NOT EXISTS user_runs (
   UNIQUE(user_id, id)
 );
 
+-- User Run Routes (GPS data for runs)
+CREATE TABLE IF NOT EXISTS user_run_routes (
+  id TEXT PRIMARY KEY,
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  run_id TEXT NOT NULL,
+  points_json TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(user_id, run_id)
+);
+
 -- User Goals
 CREATE TABLE IF NOT EXISTS user_goals (
   id TEXT PRIMARY KEY,
@@ -211,6 +221,7 @@ CREATE TABLE IF NOT EXISTS plan_comments (
 CREATE INDEX IF NOT EXISTS idx_user_runs_user_date ON user_runs(user_id, date DESC);
 CREATE INDEX IF NOT EXISTS idx_user_goals_user ON user_goals(user_id);
 CREATE INDEX IF NOT EXISTS idx_active_plans_user ON active_plans(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_run_routes_user_run ON user_run_routes(user_id, run_id);
 
 -- Ensure only one active plan per user (unique partial index)
 CREATE UNIQUE INDEX IF NOT EXISTS idx_active_plans_one_per_user 
@@ -317,6 +328,7 @@ ALTER TABLE user_goals ENABLE ROW LEVEL SECURITY;
 ALTER TABLE active_plans ENABLE ROW LEVEL SECURITY;
 ALTER TABLE training_plans ENABLE ROW LEVEL SECURITY;
 ALTER TABLE plan_days ENABLE ROW LEVEL SECURITY;
+ALTER TABLE user_run_routes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE follows ENABLE ROW LEVEL SECURITY;
 ALTER TABLE feed_activities ENABLE ROW LEVEL SECURITY;
 ALTER TABLE feed_likes ENABLE ROW LEVEL SECURITY;
@@ -338,6 +350,10 @@ CREATE POLICY "Users can insert own profile" ON profiles
 
 -- User Runs: users can only access their own
 CREATE POLICY "Users can manage own runs" ON user_runs
+  FOR ALL USING (auth.uid() = user_id);
+
+-- User Run Routes: users can only access their own GPS data
+CREATE POLICY "Users can manage own run routes" ON user_run_routes
   FOR ALL USING (auth.uid() = user_id);
 
 -- User Goals: users can only access their own

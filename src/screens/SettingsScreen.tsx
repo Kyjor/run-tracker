@@ -41,6 +41,41 @@ export function SettingsScreen() {
   const [clearConfirmText, setClearConfirmText] = useState('');
   const [isClearing, setIsClearing] = useState(false);
 
+  async function ensureNotificationPermission() {
+    // Try Tauri native notifications first (iOS / desktop)
+    try {
+      const { isTauri } = await import('@tauri-apps/api/core');
+      if (isTauri()) {
+        const { isPermissionGranted, requestPermission } = await import('@tauri-apps/plugin-notification');
+        let granted = await isPermissionGranted();
+        if (!granted) {
+          const permission = await requestPermission();
+          granted = permission === 'granted';
+        }
+        if (granted) return;
+      }
+    } catch {
+      // ignore and fall back to Web Notifications
+    }
+
+    // Web Notification API fallback (when running in browser)
+    if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'default') {
+      try {
+        await Notification.requestPermission();
+      } catch {
+        // ignore; reminders will fall back to in-app toasts
+      }
+    }
+  }
+
+  async function handleToggleDailyReminder(enabled: boolean) {
+    await updateSettings({ daily_reminder_enabled: enabled });
+    if (enabled) {
+      await ensureNotificationPermission();
+      showToast('Daily reminder enabled', 'success');
+    }
+  }
+
   // ---------------------------------------------------------------------------
   // Sync
   // ---------------------------------------------------------------------------
@@ -158,6 +193,39 @@ export function SettingsScreen() {
               value={settings.dark_mode}
               onChange={e => updateSettings({ dark_mode: e.target.value as 'system' | 'light' | 'dark' })}
             />
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium text-gray-800 dark:text-gray-100">Daily training reminder</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  Remind me each day what&apos;s on my plan (runs or cross training).
+                </p>
+              </div>
+              <label className="inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="sr-only peer"
+                  checked={!!settings.daily_reminder_enabled}
+                  onChange={e => handleToggleDailyReminder(e.target.checked)}
+                />
+                <div className="w-10 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:bg-primary-500 relative transition-colors">
+                  <div className="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transform transition-transform peer-checked:translate-x-5" />
+                </div>
+              </label>
+            </div>
+            {settings.daily_reminder_enabled && (
+              <div className="flex items-center justify-between gap-3">
+                <label className="text-sm text-gray-700 dark:text-gray-200" htmlFor="reminder-time">
+                  Reminder time
+                </label>
+                <Input
+                  id="reminder-time"
+                  type="time"
+                  className="w-32"
+                  value={settings.daily_reminder_time ?? '08:00'}
+                  onChange={e => updateSettings({ daily_reminder_time: e.target.value })}
+                />
+              </div>
+            )}
           </Card>
         </div>
 

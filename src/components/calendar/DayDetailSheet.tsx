@@ -178,7 +178,7 @@ export function DayDetailSheet({
 
   const handleLogRun = () => {
     onClose();
-    navigate('/log', { state: { date, planDayId: planDay?.id, prefill: planDay } });
+    navigate('/log/manual', { state: { date, planDayId: planDay?.id, prefill: planDay } });
   };
 
   // ---------------------------------------------------------------------------

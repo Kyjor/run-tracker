@@ -32,6 +32,8 @@ export async function loadSettings(db: Database): Promise<AppSettings> {
     last_sync_at: map['last_sync_at'] ?? '',
     pace_zones,
     max_heart_rate_bpm: isNaN(maxHR) ? DEFAULT_APP_SETTINGS.max_heart_rate_bpm : maxHR,
+    daily_reminder_enabled: map['daily_reminder_enabled'] === 'true',
+    daily_reminder_time: map['daily_reminder_time'] ?? DEFAULT_APP_SETTINGS.daily_reminder_time,
   };
 }
 

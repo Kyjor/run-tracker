@@ -81,9 +81,10 @@ export function formatPace(paceSecondsPerUnit: number, unit: DistanceUnit): stri
 }
 
 /**
- * Format distance to a nice string like "3.1 mi" or "5.0 km".
+ * Format distance to a nice string like "3.12 mi" or "5.25 km".
+ * Show two decimal places to better reflect GPS/HealthKit distances.
  */
 export function formatDistance(value: number, unit: DistanceUnit): string {
-  return `${value.toFixed(1)} ${unit}`;
+  return `${value.toFixed(2)} ${unit}`;
 }
 

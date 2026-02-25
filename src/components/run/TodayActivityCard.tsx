@@ -136,7 +136,7 @@ export function TodayActivityCard({ activity, weekNumber, dayOfWeek, weekProgres
               </div>
             ) : (
               <Button
-                onClick={() => navigate('/log', { state: { date: today(), planDayId: plan_day.id, prefill: plan_day } })}
+                onClick={() => navigate('/log/manual', { state: { date: today(), planDayId: plan_day.id, prefill: plan_day } })}
                 className="w-full"
               >
                 Log Today's Run

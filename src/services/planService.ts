@@ -144,6 +144,18 @@ export async function updatePlanDay(
        data.duration_minutes, data.description, data.workout_segments ?? null, id],
     );
   }
+
+  // Mark any active_plan that references this plan as dirty so it will be re-synced
+  const rows = await db.select<{ plan_id: string }[]>(
+    'SELECT plan_id FROM plan_days WHERE id = $1',
+    [id],
+  );
+  if (rows.length > 0) {
+    await db.execute(
+      "UPDATE active_plan SET sync_status='dirty' WHERE plan_id = $1",
+      [rows[0].plan_id],
+    );
+  }
 }
 
 /**
@@ -168,10 +180,27 @@ export async function swapPlanDayPositions(
     'UPDATE plan_days SET week_number=$1, day_of_week=$2 WHERE id=$3',
     [dayB.week_number, dayB.day_of_week, dayA.id],
   );
+
+  // Mark any active plan using this plan as dirty so updated positions sync
+  await db.execute(
+    "UPDATE active_plan SET sync_status='dirty' WHERE plan_id = $1",
+    [dayA.plan_id],
+  );
 }
 
 export async function deletePlanDay(db: Database, dayId: string): Promise<void> {
+  // Capture plan_id before delete so we can mark active plan dirty
+  const rows = await db.select<{ plan_id: string }[]>(
+    'SELECT plan_id FROM plan_days WHERE id = $1',
+    [dayId],
+  );
   await db.execute('DELETE FROM plan_days WHERE id = $1', [dayId]);
+  if (rows.length > 0) {
+    await db.execute(
+      "UPDATE active_plan SET sync_status='dirty' WHERE plan_id = $1",
+      [rows[0].plan_id],
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------

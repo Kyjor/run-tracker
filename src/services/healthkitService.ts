@@ -140,10 +140,42 @@ export async function fetchWorkoutDetails(
   maxHeartRateBpm = 190,
 ): Promise<WorkoutDetails> {
   appendHealthKitDebug('info', `Fetching workout details for ${workoutId}`);
-  return invoke<WorkoutDetails>('fetch_workout_details', {
+
+  const timeoutMs = 10000;
+
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const basePromise = invoke<WorkoutDetails>('fetch_workout_details', {
     workoutId,
     maxHeartRateBpm,
   });
+
+  try {
+    const result = await new Promise<WorkoutDetails>((resolve, reject) => {
+      timer = setTimeout(() => {
+        reject(new Error(`fetch_workout_details(${workoutId}) timed out after ${timeoutMs}ms`));
+      }, timeoutMs);
+
+      basePromise.then(
+        (value) => {
+          if (timer) clearTimeout(timer);
+          resolve(value);
+        },
+        (err) => {
+          if (timer) clearTimeout(timer);
+          reject(err);
+        },
+      );
+    });
+
+    return result;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    appendHealthKitDebug(
+      'error',
+      `Error fetching workout details for ${workoutId}: ${message}`,
+    );
+    throw error;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -213,7 +245,12 @@ export async function importHealthKitWorkout(
   maxHeartRateBpm = 190,
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    appendHealthKitDebug('info', `Import requested for workout ${workout.id} (${workout.activity_type})`);
+    appendHealthKitDebug(
+      'info',
+      `Import requested for workout ${workout.id} (${workout.activity_type})` +
+        ` distance_m=${workout.distance_meters} dur_s=${workout.duration_seconds}`,
+    );
+    appendHealthKitDebug('info', `Workout payload: ${JSON.stringify(workout, null, 2)}`);
     if (!workout.distance_meters) {
       appendHealthKitDebug('error', `Import failed for ${workout.id}: no distance data`);
       return { success: false, error: 'Workout has no distance data' };
@@ -226,9 +263,22 @@ export async function importHealthKitWorkout(
     // Fetch full details (HR zones, cadence, elevation, route, VO2…)
     let details: WorkoutDetails = {};
     try {
+      appendHealthKitDebug('info', `Fetching detailed samples for ${workout.id}…`);
+      const t0 = Date.now();
       details = await fetchWorkoutDetails(workout.id, maxHeartRateBpm);
-    } catch {
+      const elapsed = Date.now() - t0;
+      appendHealthKitDebug(
+        'info',
+        `Details fetched for ${workout.id} in ${elapsed}ms ` +
+          `(hasRoute=${details.route_points ? 'yes' : 'no'}, avgHR=${details.average_heart_rate ?? 'n/a'})`,
+      );
+    } catch (err) {
       // Non-fatal — import without details if the command fails (e.g. simulator)
+      const msg = err instanceof Error ? err.message : String(err);
+      appendHealthKitDebug(
+        'error',
+        `fetchWorkoutDetails failed for ${workout.id}: ${msg} — continuing import without detailed metrics`,
+      );
     }
 
     const distanceValue = units === 'mi'
@@ -238,6 +288,12 @@ export async function importHealthKitWorkout(
     const hrZonesJson = buildHRZonesJson(details);
     const hasRoute = details.route_points ? 1 : 0;
 
+    appendHealthKitDebug(
+      'info',
+      `Creating local run for ${workout.id} ` +
+        `(distance=${(Math.round(distanceValue * 100) / 100).toFixed(2)} ${units}, ` +
+        `duration_s=${Math.round(workout.duration_seconds)}, hasRoute=${hasRoute ? 'yes' : 'no'})`,
+    );
     await createRun(db, {
       id: workout.id,
       date: workout.start_date, // HealthKit provides ISO 8601 datetime
@@ -282,9 +338,11 @@ export async function importHealthKitWorkout(
 
       has_route: hasRoute,
     });
+    appendHealthKitDebug('info', `Local run row created for ${workout.id}`);
 
     // Publish an activity so imported workouts appear in social feed.
     // This is idempotent because publishFeedActivity dedupes run_completed by run_id.
+    appendHealthKitDebug('info', `Publishing feed activity for imported run ${workout.id}…`);
     await publishFeedActivity('run_completed', {
       distance: Math.round(distanceValue * 100) / 100,
       unit: units,
@@ -293,21 +351,33 @@ export async function importHealthKitWorkout(
       run_id: workout.id,
       run_date: format(parseISO(workout.start_date), 'yyyy-MM-dd'),
     });
+    appendHealthKitDebug('info', `Feed activity published for ${workout.id}`);
 
     // Push the new run up to Supabase in the background so it's available
     // for stats, feed construction, and other devices.
-    syncToCloud(db).catch(() => {
-      // Non-fatal; user can still sync manually if this fails.
+    appendHealthKitDebug('info', `Kicking off background sync after import for ${workout.id}…`);
+    syncToCloud(db).catch((err) => {
+      const msg = err instanceof Error ? err.message : String(err);
+      appendHealthKitDebug(
+        'error',
+        `Background sync failed after importing ${workout.id}: ${msg}`,
+      );
     });
 
     // If route data exists, persist it separately
     if (details.route_points && hasRoute) {
       const routeId = generateId();
       const now = new Date().toISOString();
+      appendHealthKitDebug(
+        'info',
+        `Persisting GPS route for ${workout.id} as route ${routeId} ` +
+          `(points_json length=${details.route_points.length})`,
+      );
       await db.execute(
         'INSERT INTO run_routes (id, run_id, points_json, created_at) VALUES ($1, $2, $3, $4)',
         [routeId, workout.id, details.route_points, now],
       );
+      appendHealthKitDebug('info', `Route persisted for ${workout.id}`);
     }
 
     appendHealthKitDebug('info', `Import successful for ${workout.id}`);
@@ -322,7 +392,13 @@ export async function importHealthKitWorkout(
       return { success: false, error: 'Workout already imported' };
     }
 
-    appendHealthKitDebug('error', `Import failed for ${workout.id}: ${message}`);
+    appendHealthKitDebug(
+      'error',
+      `Import failed for ${workout.id}: ${message}` +
+        (error instanceof Error && error.stack
+          ? `\nStack: ${error.stack.split('\n').slice(0, 5).join(' | ')}`
+          : ''),
+    );
     return { success: false, error: message || 'Unknown error' };
   }
 }

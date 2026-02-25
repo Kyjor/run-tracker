@@ -1,4 +1,5 @@
 import type { Run, HRZones } from '../../types';
+import { useSettings } from '../../contexts/SettingsContext';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -44,13 +45,30 @@ function weatherEmoji(cond: string | null) {
 }
 
 // ── Zone config ─────────────────────────────────────────────────────────────
+// Percentages are expressed as fraction of max HR.
 const ZONE_CONFIG = [
-  { label: 'Z1 Recovery', color: '#94a3b8', max: 0.60 },
-  { label: 'Z2 Easy',     color: '#34d399', max: 0.70 },
-  { label: 'Z3 Aerobic',  color: '#fbbf24', max: 0.80 },
-  { label: 'Z4 Threshold',color: '#fb923c', max: 0.90 },
-  { label: 'Z5 Max',      color: '#ef4444', max: 1.00 },
+  { name: 'Recovery',  color: '#94a3b8', min: 0.00, max: 0.60 },
+  { name: 'Easy',      color: '#34d399', min: 0.60, max: 0.70 },
+  { name: 'Aerobic',   color: '#fbbf24', min: 0.70, max: 0.80 },
+  { name: 'Threshold', color: '#fb923c', min: 0.80, max: 0.90 },
+  { name: 'Max',       color: '#ef4444', min: 0.90, max: 1.00 },
 ] as const;
+
+function formatZoneRangeLabel(idx: number, maxHrBpm: number): string {
+  const z = ZONE_CONFIG[idx];
+  const maxHr = maxHrBpm > 0 ? maxHrBpm : 190;
+
+  const minBpm = Math.round(z.min * maxHr);
+  const maxBpm = Math.round(z.max * maxHr);
+
+  if (idx === 0) {
+    return `${z.name} (<${maxBpm} bpm)`;
+  }
+  if (idx === ZONE_CONFIG.length - 1) {
+    return `${z.name} (≥${minBpm} bpm)`;
+  }
+  return `${z.name} (${minBpm}–${maxBpm} bpm)`;
+}
 
 // ── Cadence insight ──────────────────────────────────────────────────────────
 function cadenceInsight(spm: number | null): { label: string; color: string } | null {
@@ -126,7 +144,7 @@ function SectionBox({ title, children }: { title: string; children: React.ReactN
 }
 
 // ── Heart Rate Zones bar ────────────────────────────────────────────────────
-function HRZonesBar({ zones }: { zones: HRZones }) {
+function HRZonesBar({ zones, maxHrBpm }: { zones: HRZones; maxHrBpm: number }) {
   const total = zones.z1_seconds + zones.z2_seconds + zones.z3_seconds + zones.z4_seconds + zones.z5_seconds;
   if (total <= 0) return null;
 
@@ -149,7 +167,7 @@ function HRZonesBar({ zones }: { zones: HRZones }) {
             <div
               key={i}
               style={{ width: `${pct}%`, backgroundColor: ZONE_CONFIG[i].color }}
-              title={`${ZONE_CONFIG[i].label}: ${fmtSeconds(secs)}`}
+              title={`${formatZoneRangeLabel(i, maxHrBpm)} · ${fmtSeconds(secs)}`}
             />
           );
         })}
@@ -167,7 +185,7 @@ function HRZonesBar({ zones }: { zones: HRZones }) {
                 style={{ backgroundColor: ZONE_CONFIG[i].color }}
               />
               <span className="text-xs text-gray-600 dark:text-gray-300 flex-1">
-                {ZONE_CONFIG[i].label}
+                {formatZoneRangeLabel(i, maxHrBpm)}
               </span>
               <span className="text-xs text-gray-400 w-10 text-right">{pct}%</span>
               <span className="text-xs font-medium text-gray-700 dark:text-gray-200 w-12 text-right">
@@ -206,6 +224,9 @@ export function RunMetricsDisplay({ run, useFahrenheit = true }: RunMetricsDispl
     return null;
   }
 
+  const { settings } = useSettings();
+  const maxHrBpm = settings.max_heart_rate_bpm ?? 190;
+
   return (
     <div className="flex flex-col gap-3">
 
@@ -221,7 +242,12 @@ export function RunMetricsDisplay({ run, useFahrenheit = true }: RunMetricsDispl
           {run.min_heart_rate != null && (
             <MetricRow label="Min HR" value={fmtBpm(run.min_heart_rate)} />
           )}
-          {zones && <HRZonesBar zones={zones} />}
+          {zones && <HRZonesBar zones={zones} maxHrBpm={maxHrBpm} />}
+          {zones && (
+            <p className="mt-1 mb-1 text-[11px] text-gray-400 dark:text-gray-500">
+              Zone ranges are based on your max heart rate set in Settings ({maxHrBpm} bpm).
+            </p>
+          )}
         </SectionBox>
       )}
 

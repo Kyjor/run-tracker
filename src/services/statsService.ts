@@ -1,14 +1,20 @@
 import type Database from '@tauri-apps/plugin-sql';
-import type { RunStats, DistanceUnit } from '../types';
+import type { RunStats, DistanceUnit, ActivityType } from '../types';
 import { convertDistance } from '../utils/paceUtils';
 import { format, subDays, parseISO, differenceInCalendarDays } from 'date-fns';
-import { extractDate } from '../utils/dateUtils';
+import { extractDate, planDayToDate } from '../utils/dateUtils';
 
 interface RunRow {
   date: string;
   distance_value: number;
   distance_unit: DistanceUnit;
   duration_seconds: number;
+}
+
+interface PlanDayRow {
+  week_number: number;
+  day_of_week: number;
+  activity_type: ActivityType;
 }
 
 function sumDistance(runs: RunRow[], unit: DistanceUnit): number {
@@ -58,15 +64,41 @@ export async function getRunStats(
     ...runs.map(r => convertDistance(r.distance_value, r.distance_unit, unit)),
   );
 
-  // Streak calculation - extract date portion from datetime values
+  // Streak calculation — extract date portion from datetime values
   const runDates = new Set(runs.map(r => extractDate(r.date)));
+
+  // Rest days from active training plan should also count toward streak so
+  // we don't imply people must run every single day.
+  const restDates = new Set<string>();
+  try {
+    const active = await db.select<{ plan_id: string; start_date: string }[]>(
+      'SELECT plan_id, start_date FROM active_plan WHERE is_active = 1 LIMIT 1',
+    );
+    if (active.length > 0) {
+      const { plan_id, start_date } = active[0];
+      const days = await db.select<PlanDayRow[]>(
+        'SELECT week_number, day_of_week, activity_type FROM plan_days WHERE plan_id = $1',
+        [plan_id],
+      );
+      for (const d of days) {
+        if (d.activity_type === 'rest') {
+          const iso = planDayToDate(start_date, d.week_number, d.day_of_week);
+          if (iso) restDates.add(iso);
+        }
+      }
+    }
+  } catch {
+    // If this fails for any reason, just fall back to run-only streaks.
+  }
+
+  const activeDates = new Set<string>([...runDates, ...restDates]);
   let current_streak = 0;
   let longest_streak = 0;
   let streak = 0;
   // check backwards from today
   for (let i = 0; i <= 365; i++) {
     const d = format(subDays(new Date(), i), 'yyyy-MM-dd');
-    if (runDates.has(d)) {
+    if (activeDates.has(d)) {
       streak++;
       if (i === 0 || i === current_streak) current_streak = streak;
     } else {
@@ -75,7 +107,7 @@ export async function getRunStats(
     }
   }
   // longest streak
-  const sortedDates = [...runDates].sort();
+  const sortedDates = [...activeDates].sort();
   let maxStreak = 0;
   let curStreak = 0;
   let prevDate: string | null = null;
@@ -92,7 +124,7 @@ export async function getRunStats(
   let cs = 0;
   for (let i = 0; i < 365; i++) {
     const d = format(subDays(new Date(), i), 'yyyy-MM-dd');
-    if (runDates.has(d)) { cs++; } else { break; }
+    if (activeDates.has(d)) { cs++; } else { break; }
   }
   current_streak = cs;
 

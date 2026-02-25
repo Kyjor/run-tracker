@@ -239,6 +239,10 @@ export interface AppSettings {
   pace_zones: PaceZones;
   /** User's maximum heart rate in bpm, used for HR zone calculations. Default 190. */
   max_heart_rate_bpm: number;
+  /** Whether the daily training reminder notification is enabled. */
+  daily_reminder_enabled?: boolean;
+  /** Local time string "HH:mm" for daily reminder. */
+  daily_reminder_time?: string;
 }
 
 export const DEFAULT_APP_SETTINGS: AppSettings = {
@@ -249,6 +253,8 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   last_sync_at: '',
   pace_zones: DEFAULT_PACE_ZONES_MI,
   max_heart_rate_bpm: 190,
+  daily_reminder_enabled: false,
+  daily_reminder_time: '08:00',
 };
 
 // ============================================================

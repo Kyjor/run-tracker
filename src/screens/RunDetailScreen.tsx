@@ -1,14 +1,15 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import type { Run } from '../types';
+import type { Run, RoutePoint } from '../types';
 import { RUN_TYPE_LABELS, ACTIVITY_COLORS } from '../types';
 import { Header } from '../components/navigation/Header';
 import { Spinner } from '../components/ui/Spinner';
 import { RunMetricsDisplay } from '../components/run/RunMetricsDisplay';
+import { RunRouteMap } from '../components/run/RunRouteMap';
 import { useDb } from '../contexts/DatabaseContext';
 import { useSettings } from '../contexts/SettingsContext';
 import { useAuth } from '../contexts/AuthContext';
-import { getRunById } from '../services/runService';
+import { getRunById, getRouteForRun } from '../services/runService';
 import { getRunByUserAndId, getProfileById } from '../services/socialService';
 import { formatDistance, formatDuration, formatPace, calcPaceSeconds } from '../utils/paceUtils';
 import { formatLong } from '../utils/dateUtils';
@@ -25,6 +26,8 @@ export function RunDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [isFriendRun, setIsFriendRun] = useState(false);
   const [friendName, setFriendName] = useState<string | null>(null);
+  const [routePoints, setRoutePoints] = useState<RoutePoint[] | null>(null);
+  const [showDebug, setShowDebug] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -35,10 +38,18 @@ export function RunDetailScreen() {
     setIsFriendRun(!isOwnRun);
     
     if (isOwnRun) {
-      // Fetch from local DB
-      getRunById(db, id)
-        .then(r => setRun(r))
-        .finally(() => setLoading(false));
+      // Fetch from local DB, including route if available
+      (async () => {
+        const r = await getRunById(db, id);
+        setRun(r);
+        if (r && r.has_route) {
+          const route = await getRouteForRun(db, r.id);
+          setRoutePoints(route);
+        } else {
+          setRoutePoints(null);
+        }
+        setLoading(false);
+      })();
     } else {
       // Fetch friend's run from Supabase
       Promise.all([
@@ -48,10 +59,13 @@ export function RunDetailScreen() {
         .then(([r, profile]) => {
           setRun(r);
           setFriendName(profile?.display_name ?? null);
+          // TODO: fetch route for friend runs from Supabase if needed
+          setRoutePoints(null);
         })
         .catch(() => {
           setRun(null);
           setFriendName(null);
+          setRoutePoints(null);
         })
         .finally(() => setLoading(false));
     }
@@ -92,12 +106,20 @@ export function RunDetailScreen() {
         showBack
         rightAction={
           !isFriendRun ? (
-            <button
-              className="text-sm text-primary-500 font-medium pr-1"
-              onClick={() => navigate(`/log/edit/${run.id}`)}
-            >
-              Edit
-            </button>
+            <div className="flex items-center gap-2 pr-1">
+              <button
+                className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                onClick={() => setShowDebug(d => !d)}
+              >
+                {showDebug ? 'Hide debug' : 'Show debug'}
+              </button>
+              <button
+                className="text-sm text-primary-500 font-medium"
+                onClick={() => navigate(`/log/edit/${run.id}`)}
+              >
+                Edit
+              </button>
+            </div>
           ) : null
         }
       />
@@ -158,6 +180,11 @@ export function RunDetailScreen() {
           </div>
         </div>
 
+        {/* ── Route map ────────────────────────────────────────── */}
+        {!isFriendRun && run.has_route && routePoints && (
+          <RunRouteMap points={routePoints} />
+        )}
+
         {/* ── Health metrics ───────────────────────────────────── */}
         {hasMetrics && (
           <RunMetricsDisplay run={run} useFahrenheit={settings.units === 'mi'} />
@@ -169,6 +196,41 @@ export function RunDetailScreen() {
             {run.source === 'manual'
               ? 'Import from Apple Health to see HR, cadence, elevation, and more.'
               : ''}
+          </div>
+        )}
+
+        {/* ── Debug console (local-only) ───────────────────────── */}
+        {!isFriendRun && showDebug && (
+          <div className="mt-2 text-[11px] text-gray-500 dark:text-gray-400 bg-gray-900/5 dark:bg-black/40 rounded-2xl px-3 py-2 max-h-56 overflow-auto">
+            <p className="font-semibold mb-1">Debug — run &amp; route data</p>
+            <p className="mb-1">
+              has_route: {run.has_route ? '1' : '0'} · routePoints:{' '}
+              {routePoints ? routePoints.length : 0}
+            </p>
+            <pre className="whitespace-pre-wrap break-all">
+{JSON.stringify(
+  {
+    id: run.id,
+    source: run.source,
+    date: run.date,
+    distance_value: run.distance_value,
+    distance_unit: run.distance_unit,
+    duration_seconds: run.duration_seconds,
+    avg_heart_rate: run.avg_heart_rate,
+    max_heart_rate: run.max_heart_rate,
+    min_heart_rate: run.min_heart_rate,
+    avg_cadence: run.avg_cadence,
+    elevation_gain_meters: run.elevation_gain_meters,
+    elevation_loss_meters: run.elevation_loss_meters,
+    vo2_max: run.vo2_max,
+    temperature_celsius: run.temperature_celsius,
+    humidity_percent: run.humidity_percent,
+    weather_condition: run.weather_condition,
+  },
+  null,
+  2,
+)}
+            </pre>
           </div>
         )}
       </div>

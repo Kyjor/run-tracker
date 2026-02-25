@@ -214,6 +214,7 @@ async fn fetch_workout_details(
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_sql::Builder::new().build())
+        .plugin(tauri_plugin_notification::init())
         .invoke_handler(tauri::generate_handler![
             request_healthkit_permission,
             fetch_healthkit_workouts,

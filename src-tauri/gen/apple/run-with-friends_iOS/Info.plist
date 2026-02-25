@@ -15,9 +15,9 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.3.5</string>
+	<string>0.4.0</string>
 	<key>CFBundleVersion</key>
-	<string>0.3.5</string>
+	<string>0.4.0</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>UILaunchStoryboardName</key>
@@ -44,5 +44,9 @@
 	<string>Run 4 Fun reads your workouts to import runs and health metrics.</string>
 	<key>NSHealthUpdateUsageDescription</key>
 	<string>Run 4 Fun can write runs back to Apple Health.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>We use your location to track runs and show your GPS route.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>We use your location to reliably track runs even when the app is not in the foreground.</string>
 </dict>
 </plist>

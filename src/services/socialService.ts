@@ -65,31 +65,48 @@ export async function unfollowUser(targetId: string): Promise<void> {
 export async function getFollowing(): Promise<Follow[]> {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) return [];
-  const { data } = await supabase
-    .from('follows')
-    .select('*')
-    .eq('follower_id', session.user.id);
-  return data ?? [];
+  return getFollowingForUser(session.user.id);
 }
 
 export async function getFollowers(): Promise<Follow[]> {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) return [];
+  return getFollowersForUser(session.user.id);
+}
+
+/** Generic helpers to fetch another user's follows (used for friend profiles). */
+export async function getFollowingForUser(userId: string): Promise<Follow[]> {
   const { data } = await supabase
     .from('follows')
     .select('*')
-    .eq('following_id', session.user.id);
+    .eq('follower_id', userId);
   return data ?? [];
+}
+
+export async function getFollowersForUser(userId: string): Promise<Follow[]> {
+  const { data } = await supabase
+    .from('follows')
+    .select('*')
+    .eq('following_id', userId);
+  return data ?? [];
+}
+
+export async function getFollowerCountsForUser(userId: string): Promise<{ followers: number; following: number }> {
+  const [followers, following] = await Promise.all([
+    getFollowersForUser(userId),
+    getFollowingForUser(userId),
+  ]);
+  return {
+    followers: followers.length,
+    following: following.length,
+  };
 }
 
 /** Returns profiles of everyone I follow */
 export async function getFollowingWithProfiles(): Promise<Profile[]> {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) return [];
-  const { data: follows } = await supabase
-    .from('follows')
-    .select('following_id')
-    .eq('follower_id', session.user.id);
+  const follows = await getFollowingForUser(session.user.id);
   if (!follows || follows.length === 0) return [];
   const ids = follows.map(f => f.following_id);
   const { data: profiles } = await supabase.from('profiles').select('*').in('id', ids);
@@ -100,10 +117,7 @@ export async function getFollowingWithProfiles(): Promise<Profile[]> {
 export async function getFollowersWithProfiles(): Promise<Profile[]> {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) return [];
-  const { data: follows } = await supabase
-    .from('follows')
-    .select('follower_id')
-    .eq('following_id', session.user.id);
+  const follows = await getFollowersForUser(session.user.id);
   if (!follows || follows.length === 0) return [];
   const ids = follows.map(f => f.follower_id);
   const { data: profiles } = await supabase.from('profiles').select('*').in('id', ids);

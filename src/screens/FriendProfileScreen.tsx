@@ -9,7 +9,18 @@ import { Spinner } from '../components/ui/Spinner';
 import { EmptyState } from '../components/ui/EmptyState';
 import { Badge } from '../components/ui/Badge';
 import { FollowButton } from '../components/social/FollowButton';
-import { getProfileById, getRunsByUser, getAllRunsByUser, getActivePlanByUser, getPlanDaysByUser, getTrainingPlanById } from '../services/socialService';
+import { Modal } from '../components/ui/Modal';
+import {
+  getProfileById,
+  getRunsByUser,
+  getAllRunsByUser,
+  getActivePlanByUser,
+  getPlanDaysByUser,
+  getTrainingPlanById,
+  getFollowerCountsForUser,
+  getFollowersForUser,
+  getFollowingForUser,
+} from '../services/socialService';
 import { useSettings } from '../contexts/SettingsContext';
 import { useAuth } from '../contexts/AuthContext';
 import { formatDistance, formatDuration, formatPace } from '../utils/paceUtils';
@@ -42,12 +53,25 @@ export function FriendProfileScreen() {
   const [selectedPlanDay, setSelectedPlanDay] = useState<PlanDay | null>(null);
   const [selectedRun, setSelectedRun] = useState<Run | null>(null);
   const [detailSheetOpen, setDetailSheetOpen] = useState(false);
+  const [followersCount, setFollowersCount] = useState(0);
+  const [followingCount, setFollowingCount] = useState(0);
+  const [followersModalOpen, setFollowersModalOpen] = useState(false);
+  const [followingModalOpen, setFollowingModalOpen] = useState(false);
+  const [followers, setFollowers] = useState<Profile[]>([]);
+  const [following, setFollowing] = useState<Profile[]>([]);
+  const [followersLoading, setFollowersLoading] = useState(false);
+  const [followingLoading, setFollowingLoading] = useState(false);
 
   const load = useCallback(async () => {
     if (!id) return;
     setLoading(true);
-    const p = await getProfileById(id);
+    const [p, counts] = await Promise.all([
+      getProfileById(id),
+      getFollowerCountsForUser(id),
+    ]);
     setProfile(p);
+    setFollowersCount(counts.followers);
+    setFollowingCount(counts.following);
     setLoading(false);
   }, [id]);
 
@@ -181,6 +205,50 @@ export function FriendProfileScreen() {
     setSelectedRun(run ?? null);
     setDetailSheetOpen(true);
   }
+
+  async function openFollowersModal() {
+    if (!id) return;
+    setFollowersModalOpen(true);
+    setFollowersLoading(true);
+    try {
+      const follows = await getFollowersForUser(id);
+      if (!follows || follows.length === 0) {
+        setFollowers([]);
+      } else {
+        const ids = [...new Set(follows.map(f => f.follower_id))];
+        const { supabase } = await import('../services/supabaseClient');
+        const { data: profiles } = await supabase
+          .from('profiles')
+          .select('*')
+          .in('id', ids);
+        setFollowers((profiles ?? []) as Profile[]);
+      }
+    } finally {
+      setFollowersLoading(false);
+    }
+  }
+
+  async function openFollowingModal() {
+    if (!id) return;
+    setFollowingModalOpen(true);
+    setFollowingLoading(true);
+    try {
+      const follows = await getFollowingForUser(id);
+      if (!follows || follows.length === 0) {
+        setFollowing([]);
+      } else {
+        const ids = [...new Set(follows.map(f => f.following_id))];
+        const { supabase } = await import('../services/supabaseClient');
+        const { data: profiles } = await supabase
+          .from('profiles')
+          .select('*')
+          .in('id', ids);
+        setFollowing((profiles ?? []) as Profile[]);
+      }
+    } finally {
+      setFollowingLoading(false);
+    }
+  }
   
   // Calculate plan progress
   const planProgress = activePlan && planDays.length > 0 ? (() => {
@@ -235,6 +303,23 @@ export function FriendProfileScreen() {
             </div>
             <div className="flex-1">
               <p className="font-bold text-gray-900 dark:text-white text-lg">{profile.display_name}</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                <button
+                  type="button"
+                  className="hover:underline"
+                  onClick={openFollowingModal}
+                >
+                  {followingCount} following
+                </button>
+                {' · '}
+                <button
+                  type="button"
+                  className="hover:underline"
+                  onClick={openFollowersModal}
+                >
+                  {followersCount} followers
+                </button>
+              </p>
             </div>
             {!isOwnProfile && <FollowButton targetId={profile.id} />}
           </div>
@@ -438,6 +523,62 @@ export function FriendProfileScreen() {
           ))
         )}
       </div>
+
+      {/* Followers modal */}
+      <Modal
+        isOpen={followersModalOpen}
+        onClose={() => setFollowersModalOpen(false)}
+        title="Followers"
+      >
+        {followersLoading ? (
+          <div className="flex justify-center py-4">
+            <Spinner size="sm" className="text-primary-500" />
+          </div>
+        ) : followers.length === 0 ? (
+          <p className="text-sm text-gray-500 dark:text-gray-400">No followers yet.</p>
+        ) : (
+          <div className="flex flex-col gap-3">
+            {followers.map(f => (
+              <div key={f.id} className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-full bg-primary-100 dark:bg-primary-900/40 flex items-center justify-center text-sm font-semibold text-primary-700 dark:text-primary-300">
+                  {f.display_name?.[0]?.toUpperCase() ?? '?'}
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-gray-900 dark:text-white">{f.display_name}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Modal>
+
+      {/* Following modal */}
+      <Modal
+        isOpen={followingModalOpen}
+        onClose={() => setFollowingModalOpen(false)}
+        title="Following"
+      >
+        {followingLoading ? (
+          <div className="flex justify-center py-4">
+            <Spinner size="sm" className="text-primary-500" />
+          </div>
+        ) : following.length === 0 ? (
+          <p className="text-sm text-gray-500 dark:text-gray-400">Not following anyone yet.</p>
+        ) : (
+          <div className="flex flex-col gap-3">
+            {following.map(f => (
+              <div key={f.id} className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-full bg-primary-100 dark:bg-primary-900/40 flex items-center justify-center text-sm font-semibold text-primary-700 dark:text-primary-300">
+                  {f.display_name?.[0]?.toUpperCase() ?? '?'}
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-gray-900 dark:text-white">{f.display_name}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Modal>
 
       {/* Day Detail Sheet */}
       <FriendDayDetailSheet
