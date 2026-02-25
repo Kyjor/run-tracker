@@ -15,12 +15,12 @@
 		7313282B086162AFE112C43D /* Security.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D7A7DBA0FE33596A8D01E5CD /* Security.framework */; };
 		8A8E07E5DC74023CD44351F5 /* CoreGraphics.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = ED31604C72E9A72E1F829D2C /* CoreGraphics.framework */; };
 		9C0A0D338C02F9A20403E13B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = F8716191774CDF27BCDEC903 /* Assets.xcassets */; };
+		AA11223344556677889900AA /* HealthKitBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB11223344556677889900BB /* HealthKitBridge.swift */; };
+		CC11223344556677889900CC /* HealthKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = DD11223344556677889900DD /* HealthKit.framework */; };
 		D1CC027CDCB2E23BC2CB7400 /* libapp.a in Frameworks */ = {isa = PBXBuildFile; fileRef = AB8FC300930C0BBDD4BE9DDD /* libapp.a */; };
 		E3FA0513E9E7612E6221EA3D /* Metal.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = DBCDB643916B01C7E533DDD3 /* Metal.framework */; };
 		FAE916A5E3B0424CEEE3A484 /* UIKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1AEBB51B9E05293F093259AC /* UIKit.framework */; };
 		FDEA24C945BA345ACFF683C9 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 71EBFE8655B52B230CFBFB99 /* LaunchScreen.storyboard */; };
-		AA11223344556677889900AA /* HealthKitBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB11223344556677889900BB /* HealthKitBridge.swift */; };
-		CC11223344556677889900CC /* HealthKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = DD11223344556677889900DD /* HealthKit.framework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -36,15 +36,15 @@
 		7A92931E8B8C6A40855AB9B9 /* Run With Friends.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Run With Friends.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		AB8FC300930C0BBDD4BE9DDD /* libapp.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; path = libapp.a; sourceTree = "<group>"; };
 		B7D4454F691AA34FB04B2C6A /* bindings.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = bindings.h; sourceTree = "<group>"; };
+		BB11223344556677889900BB /* HealthKitBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthKitBridge.swift; sourceTree = SOURCE_ROOT; };
 		CC221A14E99790EB6CA82C88 /* QuartzCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = QuartzCore.framework; path = System/Library/Frameworks/QuartzCore.framework; sourceTree = SDKROOT; };
 		CE7BCCAE9B6A9A63431CCF5D /* run-with-friends_iOS.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "run-with-friends_iOS.entitlements"; sourceTree = "<group>"; };
 		D7A7DBA0FE33596A8D01E5CD /* Security.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Security.framework; path = System/Library/Frameworks/Security.framework; sourceTree = SDKROOT; };
 		DBCDB643916B01C7E533DDD3 /* Metal.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Metal.framework; path = System/Library/Frameworks/Metal.framework; sourceTree = SDKROOT; };
+		DD11223344556677889900DD /* HealthKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = HealthKit.framework; path = System/Library/Frameworks/HealthKit.framework; sourceTree = SDKROOT; };
 		ED31604C72E9A72E1F829D2C /* CoreGraphics.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreGraphics.framework; path = System/Library/Frameworks/CoreGraphics.framework; sourceTree = SDKROOT; };
 		F8716191774CDF27BCDEC903 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		FD7B1DCFE40C06CC59494656 /* lib.rs */ = {isa = PBXFileReference; lastKnownFileType = text; path = lib.rs; sourceTree = "<group>"; };
-		BB11223344556677889900BB /* HealthKitBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthKitBridge.swift; sourceTree = SOURCE_ROOT; };
-		DD11223344556677889900DD /* HealthKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = HealthKit.framework; path = System/Library/Frameworks/HealthKit.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */

@@ -1,9 +1,10 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
-import type { TrainingPlan, ActivePlan, TodayActivity } from '../types';
+import type { TrainingPlan, ActivePlan, TodayActivity, DistanceUnit, Run } from '../types';
 import { getActivePlan, getPlanById, getPlanDayForDate } from '../services/planService';
-import { getRunForPlanDay } from '../services/runService';
+import { getRunsForDate } from '../services/runService';
 import { currentPlanPosition, today, extractDate } from '../utils/dateUtils';
 import { useDatabase } from './DatabaseContext';
+import { convertDistance } from '../utils/paceUtils';
 
 interface PlanContextValue {
   activePlan: ActivePlan | null;
@@ -51,22 +52,86 @@ export function PlanProvider({ children }: { children: React.ReactNode }) {
 
         if (pos && details) {
           const planDay = await getPlanDayForDate(db, ap.plan_id, pos.weekNumber, pos.dayOfWeek);
-          let loggedRun = null;
+
+          let loggedRun: Run | null = null;
+          let isCompleted = false;
+
           if (planDay) {
-            loggedRun = await getRunForPlanDay(db, planDay.id);
-            // Only count as completed if the run's date matches today
-            // This prevents yesterday's run from marking today's plan day as complete
-            if (loggedRun && extractDate(loggedRun.date) !== today()) {
-              loggedRun = null;
+            const todayDate = today();
+
+            // Fetch all runs logged today (manual + HealthKit), regardless of plan_day_id.
+            const todaysRuns = await getRunsForDate(db, todayDate);
+
+            // Filter to only runs actually on "today" by date portion, as extra safety.
+            const todaysRunsExact = todaysRuns.filter(
+              r => extractDate(r.date) === todayDate,
+            );
+
+            // Choose a representative run for UI display:
+            // - Prefer a run explicitly linked to this plan day
+            // - Fallback to the latest run today (if any)
+            loggedRun =
+              todaysRunsExact.find(r => r.plan_day_id === planDay.id) ??
+              (todaysRunsExact.length > 0
+                ? todaysRunsExact[todaysRunsExact.length - 1]
+                : null);
+
+            // For run-type days with a planned distance, consider the day completed
+            // when the *sum* of today's runs meets or exceeds the planned distance.
+            const runLikeActivities = ['easy_run', 'pace_run', 'tempo_run', 'long_run', 'intervals', 'race'];
+            const hasPlannedDistance =
+              planDay.distance_value != null && planDay.distance_value > 0;
+            const isRunDay = runLikeActivities.includes(planDay.activity_type);
+
+            if (isRunDay && hasPlannedDistance) {
+              const targetUnit: DistanceUnit = (planDay.distance_unit as DistanceUnit) ?? 'mi';
+
+              const totalDistanceInPlanUnits = todaysRunsExact.reduce((sum, r) => {
+                return (
+                  sum +
+                  convertDistance(
+                    r.distance_value,
+                    r.distance_unit as DistanceUnit,
+                    targetUnit,
+                  )
+                );
+              }, 0);
+
+              if (totalDistanceInPlanUnits + 1e-6 >= planDay.distance_value!) {
+                isCompleted = true;
+              }
+
+              setTodayActivity({
+                plan_day: planDay,
+                is_completed: isCompleted,
+                logged_run: loggedRun,
+                todays_runs: todaysRunsExact,
+                total_distance: totalDistanceInPlanUnits,
+              });
+            } else {
+              // For non-distance-based days, fall back to simple "any run logged" semantics.
+              if (loggedRun) {
+                isCompleted = true;
+              }
+              setTodayActivity({
+                plan_day: planDay,
+                is_completed: isCompleted,
+                logged_run: loggedRun,
+                todays_runs: todaysRunsExact,
+                total_distance: 0,
+              });
             }
+          } else {
+            setTodayActivity({
+              plan_day: planDay,
+              is_completed: false,
+              logged_run: null,
+              todays_runs: [],
+              total_distance: 0,
+            });
           }
-          setTodayActivity({
-            plan_day: planDay,
-            is_completed: !!loggedRun,
-            logged_run: loggedRun,
-          });
         } else {
-          setTodayActivity({ plan_day: null, is_completed: false, logged_run: null });
+          setTodayActivity({ plan_day: null, is_completed: false, logged_run: null, todays_runs: [], total_distance: 0 });
         }
       } else {
         setActivePlanDetails(null);

@@ -1,10 +1,10 @@
 import { useNavigate } from 'react-router-dom';
-import type { TodayActivity } from '../../types';
+import type { TodayActivity, DistanceUnit } from '../../types';
 import { ACTIVITY_COLORS, ACTIVITY_LABELS } from '../../types';
 import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { ProgressBar } from '../ui/ProgressBar';
-import { formatDistance, formatDuration } from '../../utils/paceUtils';
+import { formatDistance, formatDuration, convertDistance } from '../../utils/paceUtils';
 import { getRestDayMessage, getCrossTrainingMessage } from '../../utils/restDayMessages';
 import { today } from '../../utils/dateUtils';
 import { useSettings } from '../../contexts/SettingsContext';
@@ -22,7 +22,7 @@ const DOW_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 export function TodayActivityCard({ activity, weekNumber, dayOfWeek, weekProgress }: TodayActivityCardProps) {
   const navigate = useNavigate();
   const { settings } = useSettings();
-  const { plan_day, is_completed, logged_run } = activity;
+  const { plan_day, is_completed, todays_runs, total_distance } = activity;
   const color = plan_day ? ACTIVITY_COLORS[plan_day.activity_type] : '#9ca3af';
 
   if (!plan_day) {
@@ -76,7 +76,13 @@ export function TodayActivityCard({ activity, weekNumber, dayOfWeek, weekProgres
             </p>
             {plan_day.distance_value && (
               <p className="text-sm text-gray-600 dark:text-gray-400">
-                {formatDistance(plan_day.distance_value, settings.units)}
+                {(() => {
+                  const planUnit: DistanceUnit = (plan_day.distance_unit as DistanceUnit) ?? settings.units;
+                  const displayUnit = settings.units;
+                  const planDistance = convertDistance(plan_day.distance_value, planUnit, displayUnit);
+                  const totalDistance = convertDistance(total_distance, planUnit, displayUnit);
+                  return `${formatDistance(totalDistance, displayUnit)} / ${formatDistance(planDistance, displayUnit)}`;
+                })()}
               </p>
             )}
             {isCross && plan_day.duration_minutes && (
@@ -121,6 +127,37 @@ export function TodayActivityCard({ activity, weekNumber, dayOfWeek, weekProgres
           />
         )}
 
+        {/* Today's runs list */}
+        {!isRest && todays_runs.length > 0 && (
+          <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-700">
+            <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">
+              Today's Runs ({todays_runs.length})
+            </p>
+            <div className="space-y-2">
+              {todays_runs.map((run) => (
+                <div
+                  key={run.id}
+                  className="flex items-center justify-between text-sm bg-gray-50 dark:bg-gray-800 rounded-lg px-3 py-2"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-gray-400">•</span>
+                    <span className="text-gray-700 dark:text-gray-300">
+                      {formatDistance(run.distance_value, run.distance_unit as DistanceUnit)}
+                    </span>
+                    <span className="text-gray-400">·</span>
+                    <span className="text-gray-500 dark:text-gray-400">
+                      {formatDuration(run.duration_seconds)}
+                    </span>
+                  </div>
+                  {run.source === 'healthkit' && (
+                    <span className="text-xs text-gray-400">HealthKit</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Action */}
         {!isRest && (
           <div className="mt-4">
@@ -128,11 +165,6 @@ export function TodayActivityCard({ activity, weekNumber, dayOfWeek, weekProgres
               <div className="flex items-center gap-2 text-green-600 dark:text-green-400">
                 <span className="text-lg">✓</span>
                 <span className="font-semibold text-sm">Completed!</span>
-                {logged_run && (
-                  <span className="text-xs text-gray-400 ml-auto">
-                    {formatDistance(logged_run.distance_value, logged_run.distance_unit)} · {formatDuration(logged_run.duration_seconds)}
-                  </span>
-                )}
               </div>
             ) : (
               <Button

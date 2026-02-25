@@ -40,33 +40,50 @@ export function SettingsScreen() {
   const [clearModal, setClearModal] = useState(false);
   const [clearConfirmText, setClearConfirmText] = useState('');
   const [isClearing, setIsClearing] = useState(false);
+  const [notificationStatus, setNotificationStatus] = useState<'granted' | 'denied' | 'default' | 'unknown' | null>(null);
 
   async function ensureNotificationPermission() {
-    // Try Tauri native notifications first (iOS / desktop)
     try {
-      const { isTauri } = await import('@tauri-apps/api/core');
-      if (isTauri()) {
-        const { isPermissionGranted, requestPermission } = await import('@tauri-apps/plugin-notification');
-        let granted = await isPermissionGranted();
-        if (!granted) {
-          const permission = await requestPermission();
-          granted = permission === 'granted';
+      const { requestNotificationPermission, getNotificationPermissionStatus } = await import('../hooks/useDailyTrainingReminder');
+      const { granted, status, needsSettings } = await requestNotificationPermission();
+      setNotificationStatus(status as 'granted' | 'denied' | 'default' | 'unknown');
+      if (!granted) {
+        if (needsSettings) {
+          showToast('Permission was denied. Go to Settings > Run With Friends > Notifications to enable.', 'info');
+        } else {
+          showToast('Notification permission denied. Reminders will use in-app notifications.', 'info');
         }
-        if (granted) return;
+      } else {
+        showToast('Notification permission granted!', 'success');
       }
-    } catch {
-      // ignore and fall back to Web Notifications
-    }
-
-    // Web Notification API fallback (when running in browser)
-    if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'default') {
+      // Refresh status after request
       try {
-        await Notification.requestPermission();
-      } catch {
-        // ignore; reminders will fall back to in-app toasts
+        const currentStatus = await getNotificationPermissionStatus();
+        setNotificationStatus(currentStatus);
+      } catch (error) {
+        console.warn('[Settings] Failed to refresh notification status:', error);
       }
+    } catch (error) {
+      console.error('[Settings] Failed to request notification permission:', error);
+      showToast('Failed to request notification permission', 'error');
     }
   }
+
+  // Check notification status on mount
+  useEffect(() => {
+    if (settings.daily_reminder_enabled) {
+      (async () => {
+        try {
+          const { getNotificationPermissionStatus } = await import('../hooks/useDailyTrainingReminder');
+          const status = await getNotificationPermissionStatus();
+          setNotificationStatus(status);
+        } catch (error) {
+          console.warn('[Settings] Failed to check notification status:', error);
+          // Don't block the screen if this fails
+        }
+      })();
+    }
+  }, [settings.daily_reminder_enabled]);
 
   async function handleToggleDailyReminder(enabled: boolean) {
     await updateSettings({ daily_reminder_enabled: enabled });
@@ -213,18 +230,48 @@ export function SettingsScreen() {
               </label>
             </div>
             {settings.daily_reminder_enabled && (
-              <div className="flex items-center justify-between gap-3">
-                <label className="text-sm text-gray-700 dark:text-gray-200" htmlFor="reminder-time">
-                  Reminder time
-                </label>
-                <Input
-                  id="reminder-time"
-                  type="time"
-                  className="w-32"
-                  value={settings.daily_reminder_time ?? '08:00'}
-                  onChange={e => updateSettings({ daily_reminder_time: e.target.value })}
-                />
-              </div>
+              <>
+                <div className="flex items-center justify-between gap-3">
+                  <label className="text-sm text-gray-700 dark:text-gray-200" htmlFor="reminder-time">
+                    Reminder time
+                  </label>
+                  <Input
+                    id="reminder-time"
+                    type="time"
+                    className="w-32"
+                    value={settings.daily_reminder_time ?? '08:00'}
+                    onChange={e => updateSettings({ daily_reminder_time: e.target.value })}
+                  />
+                </div>
+                {notificationStatus && (
+                  <div className="flex flex-col gap-2 text-xs">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-gray-500 dark:text-gray-400">Notification permission:</span>
+                      <span className={`font-medium ${
+                        notificationStatus === 'granted' 
+                          ? 'text-green-600 dark:text-green-400' 
+                          : notificationStatus === 'denied'
+                          ? 'text-red-600 dark:text-red-400'
+                          : 'text-yellow-600 dark:text-yellow-400'
+                      }`}>
+                        {notificationStatus === 'granted' ? '✓ Granted' : 
+                         notificationStatus === 'denied' ? '✗ Denied (enable in iOS Settings)' :
+                         notificationStatus === 'default' ? 'Not requested' : 'Unknown'}
+                      </span>
+                    </div>
+                    {notificationStatus !== 'granted' && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={ensureNotificationPermission}
+                        className="text-xs"
+                      >
+                        Request Permission Now
+                      </Button>
+                    )}
+                  </div>
+                )}
+              </>
             )}
           </Card>
         </div>

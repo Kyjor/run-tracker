@@ -238,11 +238,23 @@ public func fetchWorkoutDetails(
     resultPtr: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>?,
     resultLen: UnsafeMutablePointer<Int>?
 ) -> Int32 {
-    guard HKHealthStore.isHealthDataAvailable() else { return -1 }
+    guard HKHealthStore.isHealthDataAvailable() else {
+        print("[HealthKit] [details] Health data not available")
+        return -1
+    }
     let workoutId = String(cString: workoutIdStr)
+    print("[HealthKit] [details] Starting fetchWorkoutDetails for id=\(workoutId)")
 
     // Fetch the specific workout object first
-    guard let workout = fetchWorkoutById(workoutId) else { return -2 }
+    let fetchStart = Date()
+    guard let workout = fetchWorkoutById(workoutId) else {
+        let elapsed = Date().timeIntervalSince(fetchStart)
+        print("[HealthKit] [details] fetchWorkoutById returned nil for id=\(workoutId) after \(elapsed)s")
+        return -2
+    }
+    let elapsedFetch = Date().timeIntervalSince(fetchStart)
+    let distMeters = workout.totalDistance?.doubleValue(for: .meter()) ?? -1
+    print("[HealthKit] [details] Found workout id=\(workoutId) duration=\(workout.duration)s distance_m=\(distMeters) fetchTime=\(elapsedFetch)s")
 
     let semaphore = DispatchSemaphore(value: 0)
     var details = WorkoutDetailsJSON()
@@ -250,7 +262,10 @@ public func fetchWorkoutDetails(
 
     // ── Heart Rate (full samples for zones + min) ─────────────────────────
     group.enter()
+    let hrStart = Date()
+    print("[HealthKit] [details] HR samples query starting for id=\(workoutId)")
     fetchHRSamples(workout: workout) { samples in
+        print("[HealthKit] [details] HR samples callback for id=\(workoutId) count=\(samples.count) elapsed=\(Date().timeIntervalSince(hrStart))s")
         if !samples.isEmpty {
             let values = samples.map { $0.quantity.doubleValue(for: HKUnit(from: "count/min")) }
             details.min_heart_rate = values.min()
@@ -279,9 +294,14 @@ public func fetchWorkoutDetails(
 
     // ── Cadence (step count → steps/min) ─────────────────────────────────
     group.enter()
+    let cadenceStart = Date()
+    print("[HealthKit] [details] Cadence stats query starting for id=\(workoutId)")
     fetchStatistic(workout: workout, type: .stepCount, options: .cumulativeSum) { stats in
         if let total = stats?.sumQuantity()?.doubleValue(for: .count()) {
             details.average_cadence = total / (workout.duration / 60.0)
+            print("[HealthKit] [details] Cadence stats complete for id=\(workoutId) totalSteps=\(total) elapsed=\(Date().timeIntervalSince(cadenceStart))s")
+        } else {
+            print("[HealthKit] [details] Cadence stats missing for id=\(workoutId) elapsed=\(Date().timeIntervalSince(cadenceStart))s")
         }
         group.leave()
     }
@@ -289,46 +309,67 @@ public func fetchWorkoutDetails(
     // ── Running form (iOS 16+ / watchOS 9+) ─────────────────────────────
     if #available(iOS 16.0, *) {
         group.enter()
+        let strideStart = Date()
+        print("[HealthKit] [details] Stride length stats query starting for id=\(workoutId)")
         fetchStatistic(workout: workout, type: .runningStrideLength, options: .discreteAverage) { stats in
             details.average_stride_length_meters = stats?.averageQuantity()?.doubleValue(for: .meter())
+            print("[HealthKit] [details] Stride length stats complete for id=\(workoutId) value=\(details.average_stride_length_meters ?? -1) elapsed=\(Date().timeIntervalSince(strideStart))s")
             group.leave()
         }
 
         group.enter()
+        let gctStart = Date()
+        print("[HealthKit] [details] Ground contact time stats query starting for id=\(workoutId)")
         fetchStatistic(workout: workout, type: .runningGroundContactTime, options: .discreteAverage) { stats in
             // HealthKit stores GCT in seconds; convert to ms
             if let secs = stats?.averageQuantity()?.doubleValue(for: .second()) {
                 details.average_ground_contact_time_ms = secs * 1000
+                print("[HealthKit] [details] GCT stats complete for id=\(workoutId) value_ms=\(details.average_ground_contact_time_ms ?? -1) elapsed=\(Date().timeIntervalSince(gctStart))s")
+            } else {
+                print("[HealthKit] [details] GCT stats missing for id=\(workoutId) elapsed=\(Date().timeIntervalSince(gctStart))s")
             }
             group.leave()
         }
 
         group.enter()
+        let voStart = Date()
+        print("[HealthKit] [details] Vertical oscillation stats query starting for id=\(workoutId)")
         fetchStatistic(workout: workout, type: .runningVerticalOscillation, options: .discreteAverage) { stats in
             // HealthKit stores in metres; convert to cm
             if let metres = stats?.averageQuantity()?.doubleValue(for: .meter()) {
                 details.average_vertical_oscillation_cm = metres * 100
+                print("[HealthKit] [details] VO stats complete for id=\(workoutId) value_cm=\(details.average_vertical_oscillation_cm ?? -1) elapsed=\(Date().timeIntervalSince(voStart))s")
+            } else {
+                print("[HealthKit] [details] VO stats missing for id=\(workoutId) elapsed=\(Date().timeIntervalSince(voStart))s")
             }
             group.leave()
         }
 
         group.enter()
+        let powerStart = Date()
+        print("[HealthKit] [details] Running power stats query starting for id=\(workoutId)")
         fetchStatistic(workout: workout, type: .runningPower, options: [.discreteAverage, .discreteMax]) { stats in
             details.average_power_watts = stats?.averageQuantity()?.doubleValue(for: HKUnit.watt())
             details.max_power_watts = stats?.maximumQuantity()?.doubleValue(for: HKUnit.watt())
+            print("[HealthKit] [details] Power stats complete for id=\(workoutId) avg=\(details.average_power_watts ?? -1) max=\(details.max_power_watts ?? -1) elapsed=\(Date().timeIntervalSince(powerStart))s")
             group.leave()
         }
     }
 
     // ── VO2 max (latest sample) ──────────────────────────────────────────
     group.enter()
+    let vo2Start = Date()
+    print("[HealthKit] [details] VO2 max query starting for id=\(workoutId)")
     fetchLatestVO2Max { v in
         details.vo2_max = v
+        print("[HealthKit] [details] VO2 max query complete for id=\(workoutId) value=\(v ?? -1) elapsed=\(Date().timeIntervalSince(vo2Start))s")
         group.leave()
     }
 
     // ── GPS Route ────────────────────────────────────────────────────────
     group.enter()
+    let routeStart = Date()
+    print("[HealthKit] [details] Route query starting for id=\(workoutId)")
     fetchRoute(workout: workout) { points, gain, loss in
         details.elevation_gain_meters = gain
         details.elevation_loss_meters = loss
@@ -337,18 +378,25 @@ public func fetchWorkoutDetails(
                let str = String(data: json, encoding: .utf8) {
                 details.route_points = str
             }
+            print("[HealthKit] [details] Route query complete for id=\(workoutId) points=\(pts.count) gain=\(gain ?? -1) loss=\(loss ?? -1) elapsed=\(Date().timeIntervalSince(routeStart))s")
+        } else {
+            print("[HealthKit] [details] Route query returned no points for id=\(workoutId) gain=\(gain ?? -1) loss=\(loss ?? -1) elapsed=\(Date().timeIntervalSince(routeStart))s")
         }
         group.leave()
     }
 
+    let groupStart = Date()
     group.notify(queue: .global()) { semaphore.signal() }
     semaphore.wait()
+    let groupElapsed = Date().timeIntervalSince(groupStart)
+    print("[HealthKit] [details] All detail sub-queries completed for id=\(workoutId) in \(groupElapsed)s, encoding JSON…")
 
     do {
         let json = try JSONEncoder().encode(details)
         let str = String(data: json, encoding: .utf8)!
         resultPtr?.pointee = strdup(str)
         resultLen?.pointee = str.utf8.count
+        print("[HealthKit] [details] Encoded details JSON for id=\(workoutId) length=\(str.utf8.count) bytes")
         return 0
     } catch {
         print("[HealthKit] Encode details error: \(error)")

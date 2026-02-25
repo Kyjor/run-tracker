@@ -9,7 +9,7 @@ import { SettingsProvider, useSettings } from './contexts/SettingsContext';
 import { ToastProvider } from './contexts/ToastContext';
 import { AuthProvider } from './contexts/AuthContext';
 import { PlanProvider } from './contexts/PlanContext';
-import { useDailyTrainingReminder } from './hooks/useDailyTrainingReminder';
+import { useDailyTrainingReminder, requestNotificationPermission } from './hooks/useDailyTrainingReminder';
 
 // Layout
 import { TabBar } from './components/navigation/TabBar';
@@ -53,6 +53,16 @@ function AppShell() {
 
   // Local daily training reminder (simple, app-local)
   useDailyTrainingReminder();
+
+  // Request notification permission on startup if reminder is enabled
+  useEffect(() => {
+    if (!isLoaded || !settings.daily_reminder_enabled) return;
+    void requestNotificationPermission().then(({ granted, needsSettings }) => {
+      if (!granted && needsSettings) {
+        console.warn('[Notifications] Permission denied. User needs to enable in iOS Settings.');
+      }
+    });
+  }, [isLoaded, settings.daily_reminder_enabled]);
 
   // Auto-sync on startup when logged in
   useEffect(() => {

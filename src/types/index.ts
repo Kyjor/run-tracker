@@ -393,6 +393,8 @@ export interface TodayActivity {
   plan_day: PlanDay | null;
   is_completed: boolean;
   logged_run: Run | null;
+  todays_runs: Run[];
+  total_distance: number; // Total distance in plan_day's distance_unit
 }
 
 export interface WeekSummary {
