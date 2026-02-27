@@ -85,7 +85,7 @@ export function CommentModal({ isOpen, onClose, activityId, onCommentAdded }: Co
     >
       <div className="flex flex-col gap-4">
         {/* Comments list */}
-        <div className="flex-1 overflow-y-auto" style={{ maxHeight: 'calc(90dvh - 200px)' }}>
+        <div className="flex-1 overflow-y-auto">
           {loading ? (
             <div className="flex justify-center py-8">
               <Spinner size="lg" className="text-primary-500" />

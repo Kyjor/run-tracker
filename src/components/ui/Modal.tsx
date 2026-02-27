@@ -14,8 +14,15 @@ export function Modal({ isOpen, onClose, title, children, footer }: ModalProps) 
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
     };
-    if (isOpen) document.addEventListener('keydown', handler);
-    return () => document.removeEventListener('keydown', handler);
+    if (isOpen) {
+      document.addEventListener('keydown', handler);
+      // Prevent background scrolling while modal is open
+      document.body.style.overflow = 'hidden';
+    }
+    return () => {
+      document.removeEventListener('keydown', handler);
+      document.body.style.overflow = '';
+    };
   }, [isOpen, onClose]);
 
   if (!isOpen) return null;

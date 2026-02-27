@@ -9,7 +9,9 @@ import { RunRouteMap } from '../components/run/RunRouteMap';
 import { useDb } from '../contexts/DatabaseContext';
 import { useSettings } from '../contexts/SettingsContext';
 import { useAuth } from '../contexts/AuthContext';
+import { useToast } from '../contexts/ToastContext';
 import { getRunById, getRouteForRun } from '../services/runService';
+import { mergeHealthKitMetricsIntoRun } from '../services/healthkitService';
 import { getRunByUserAndId, getProfileById } from '../services/socialService';
 import { formatDistance, formatDuration, formatPace, calcPaceSeconds } from '../utils/paceUtils';
 import { formatLong } from '../utils/dateUtils';
@@ -21,6 +23,7 @@ export function RunDetailScreen() {
   const db = useDb();
   const { settings } = useSettings();
   const { user } = useAuth();
+  const { showToast } = useToast();
 
   const [run, setRun] = useState<Run | null>(null);
   const [loading, setLoading] = useState(true);
@@ -28,6 +31,18 @@ export function RunDetailScreen() {
   const [friendName, setFriendName] = useState<string | null>(null);
   const [routePoints, setRoutePoints] = useState<RoutePoint[] | null>(null);
   const [showDebug, setShowDebug] = useState(false);
+  const [isMerging, setIsMerging] = useState(false);
+
+  async function reloadRun(runId: string) {
+    const r = await getRunById(db, runId);
+    setRun(r);
+    if (r && r.has_route) {
+      const route = await getRouteForRun(db, r.id);
+      setRoutePoints(route);
+    } else {
+      setRoutePoints(null);
+    }
+  }
 
   useEffect(() => {
     if (!id) return;
@@ -40,14 +55,7 @@ export function RunDetailScreen() {
     if (isOwnRun) {
       // Fetch from local DB, including route if available
       (async () => {
-        const r = await getRunById(db, id);
-        setRun(r);
-        if (r && r.has_route) {
-          const route = await getRouteForRun(db, r.id);
-          setRoutePoints(route);
-        } else {
-          setRoutePoints(null);
-        }
+        await reloadRun(id);
         setLoading(false);
       })();
     } else {
@@ -82,6 +90,29 @@ export function RunDetailScreen() {
     );
   }
 
+  async function handleMergeHealthKit() {
+    if (!db || !run) return;
+    setIsMerging(true);
+    try {
+      const { success, error } = await mergeHealthKitMetricsIntoRun(
+        db,
+        run,
+        settings.units,
+        settings.max_heart_rate_bpm,
+      );
+      if (!success) {
+        showToast(error || 'Could not find matching Apple Health workout', 'error');
+        return;
+      }
+      showToast('Merged Apple Health metrics into this run', 'success');
+      await reloadRun(run.id);
+    } catch {
+      showToast('Failed to merge Apple Health metrics', 'error');
+    } finally {
+      setIsMerging(false);
+    }
+  }
+
   if (!run) {
     return (
       <div className="flex flex-col flex-1">
@@ -113,6 +144,15 @@ export function RunDetailScreen() {
               >
                 {showDebug ? 'Hide debug' : 'Show debug'}
               </button>
+              {run.source === 'manual' && (
+                <button
+                  className="text-xs text-primary-500 font-medium disabled:opacity-50"
+                  disabled={isMerging}
+                  onClick={handleMergeHealthKit}
+                >
+                  {isMerging ? 'Merging…' : 'Merge Apple Health'}
+                </button>
+              )}
               <button
                 className="text-sm text-primary-500 font-medium"
                 onClick={() => navigate(`/log/edit/${run.id}`)}

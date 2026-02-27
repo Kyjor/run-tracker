@@ -108,6 +108,9 @@ function AppShell() {
     location.pathname.startsWith('/social') ||
     location.pathname.startsWith('/community');
 
+  // Hide the bottom nav on the live run screen so you can't tab away mid-run
+  const showTabBar = isTabRoute && !location.pathname.startsWith('/log/live');
+
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-gray-50 dark:bg-gray-900">
       <div className="flex-1 overflow-hidden flex flex-col">
@@ -149,8 +152,8 @@ function AppShell() {
         </Routes>
       </div>
 
-      {/* Tab bar only on main routes */}
-      {isTabRoute && <TabBar />}
+      {/* Tab bar only on main routes (exclude live run) */}
+      {showTabBar && <TabBar />}
 
       <ToastContainer />
     </div>

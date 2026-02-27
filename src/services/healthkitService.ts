@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
-import type { Run, RunType, HRZones } from '../types';
-import { createRun } from './runService';
+import type { Run, RunType, HRZones, DistanceUnit } from '../types';
+import { createRun, updateRun } from './runService';
 import type Database from '@tauri-apps/plugin-sql';
 import { format, parseISO } from 'date-fns';
 import { generateId } from '../utils/generateId';
@@ -232,6 +232,127 @@ function buildHRZonesJson(d: WorkoutDetails): string | null {
     z5_seconds: d.hr_zone_5_seconds ?? 0,
   };
   return JSON.stringify(zones);
+}
+
+// ---------------------------------------------------------------------------
+// Merge metrics into an existing run (for GPS runs recorded in-app)
+// ---------------------------------------------------------------------------
+
+function findBestMatchingWorkoutForRun(
+  run: Run,
+  workouts: HealthKitWorkout[],
+  units: DistanceUnit,
+): HealthKitWorkout | null {
+  if (!workouts.length) return null;
+
+  const runStart = new Date(run.date).getTime();
+  const runDurationMs = run.duration_seconds * 1000;
+
+  let best: { w: HealthKitWorkout; score: number } | null = null;
+
+  for (const w of workouts) {
+    if (!w.distance_meters) continue;
+    const wStart = new Date(w.start_date).getTime();
+    const wDurationMs = w.duration_seconds * 1000;
+
+    // Time overlap: penalize if start times differ by more than ~30 minutes
+    const timeDiffMin = Math.abs(wStart - runStart) / (60 * 1000);
+    if (timeDiffMin > 90) continue; // too far apart
+
+    // Distance similarity
+    const wDistance = units === 'mi' ? w.distance_meters / 1609.34 : w.distance_meters / 1000;
+    const distanceDiff = Math.abs(wDistance - run.distance_value);
+
+    // Duration similarity (minutes)
+    const durationDiffMin = Math.abs(wDurationMs - runDurationMs) / (60 * 1000);
+
+    // Build a simple score: lower is better
+    const score = timeDiffMin * 0.5 + distanceDiff * 2 + durationDiffMin;
+
+    if (!best || score < best.score) {
+      best = { w, score };
+    }
+  }
+
+  // Require a reasonably close match
+  if (!best) return null;
+  if (best.score > 60) {
+    // Heuristic: if score is huge, probably wrong workout
+    return null;
+  }
+  return best.w;
+}
+
+export async function mergeHealthKitMetricsIntoRun(
+  db: Database,
+  run: Run,
+  units: DistanceUnit,
+  maxHeartRateBpm = 190,
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    appendHealthKitDebug('info', `Merge requested for run ${run.id} (${run.source}) at ${run.date}`);
+
+    // Only merge for own, non-HealthKit runs
+    if (run.source === 'healthkit') {
+      return { success: false, error: 'Run already comes from Apple Health' };
+    }
+
+    const runDate = parseISO(run.date);
+    const dayStart = new Date(runDate);
+    dayStart.setUTCHours(0, 0, 0, 0);
+    const dayEnd = new Date(runDate);
+    dayEnd.setUTCHours(23, 59, 59, 999);
+
+    const workouts = await fetchHealthKitWorkouts(dayStart.toISOString(), dayEnd.toISOString());
+    appendHealthKitDebug('info', `Found ${workouts.length} HealthKit workouts on run date for merge`);
+
+    const match = findBestMatchingWorkoutForRun(run, workouts, units);
+    if (!match) {
+      appendHealthKitDebug('info', `No suitable HealthKit workout match found for run ${run.id}`);
+      return { success: false, error: 'No matching Apple Health workout found for this run' };
+    }
+
+    appendHealthKitDebug('info', `Merging metrics from workout ${match.id} into run ${run.id}`);
+
+    let details: WorkoutDetails = {};
+    try {
+      details = await fetchWorkoutDetails(match.id, maxHeartRateBpm);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      appendHealthKitDebug('error', `fetchWorkoutDetails failed during merge for ${match.id}: ${msg}`);
+      // Continue with whatever we have
+    }
+
+    const hrZonesJson = buildHRZonesJson(details);
+
+    // Update only metric-related fields; keep distance/route/time as recorded locally
+    await updateRun(db, run.id, {
+      avg_heart_rate: details.average_heart_rate ?? match.average_heart_rate ?? run.avg_heart_rate,
+      max_heart_rate: details.max_heart_rate ?? match.max_heart_rate ?? run.max_heart_rate,
+      min_heart_rate: details.min_heart_rate ?? run.min_heart_rate,
+      hr_zones: hrZonesJson ?? run.hr_zones,
+      avg_cadence: details.average_cadence ?? run.avg_cadence,
+      avg_stride_length_meters: details.average_stride_length_meters ?? run.avg_stride_length_meters,
+      avg_ground_contact_time_ms: details.average_ground_contact_time_ms ?? run.avg_ground_contact_time_ms,
+      avg_vertical_oscillation_cm: details.average_vertical_oscillation_cm ?? run.avg_vertical_oscillation_cm,
+      avg_power_watts: details.average_power_watts ?? run.avg_power_watts,
+      max_power_watts: details.max_power_watts ?? run.max_power_watts,
+      elevation_gain_meters: details.elevation_gain_meters ?? run.elevation_gain_meters,
+      elevation_loss_meters: details.elevation_loss_meters ?? run.elevation_loss_meters,
+      vo2_max: details.vo2_max ?? run.vo2_max,
+      temperature_celsius: match.temperature_celsius ?? run.temperature_celsius,
+      humidity_percent: match.humidity_percent ?? run.humidity_percent,
+      weather_condition: match.weather_condition ?? run.weather_condition,
+      calories: match.energy_burned_kcal ?? run.calories,
+    });
+
+    appendHealthKitDebug('info', `Merge successful for run ${run.id} using workout ${match.id}`);
+    return { success: true };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    appendHealthKitDebug('error', `Merge failed for run ${run.id}: ${message}`);
+    return { success: false, error: message || 'Unknown error merging Apple Health metrics' };
+  }
 }
 
 // ---------------------------------------------------------------------------

@@ -203,7 +203,8 @@ export function LiveRunScreen() {
 
   return (
     <div className="flex flex-col flex-1 overflow-y-auto pb-24">
-      <Header title="Live Run" showBack />
+      {/* While a live run is active, disable the back button so the user can't leave the screen */}
+      <Header title="Live Run" showBack={!isRunning} />
 
       <div className="px-4 pt-4 flex flex-col gap-4">
         <Card>
