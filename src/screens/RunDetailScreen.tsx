@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import type { Run, RoutePoint } from '../types';
 import { RUN_TYPE_LABELS, ACTIVITY_COLORS } from '../types';
@@ -6,6 +6,7 @@ import { Header } from '../components/navigation/Header';
 import { Spinner } from '../components/ui/Spinner';
 import { RunMetricsDisplay } from '../components/run/RunMetricsDisplay';
 import { RunRouteMap } from '../components/run/RunRouteMap';
+import { RunSplitsSection } from '../components/run/RunSplitsSection';
 import { useDb } from '../contexts/DatabaseContext';
 import { useSettings } from '../contexts/SettingsContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -15,6 +16,7 @@ import { mergeHealthKitMetricsIntoRun } from '../services/healthkitService';
 import { getRunByUserAndId, getProfileById } from '../services/socialService';
 import { formatDistance, formatDuration, formatPace, calcPaceSeconds } from '../utils/paceUtils';
 import { formatLong } from '../utils/dateUtils';
+import { computeRouteSplits } from '../utils/routeSplits';
 
 export function RunDetailScreen() {
   const { id } = useParams<{ id: string }>();
@@ -78,6 +80,11 @@ export function RunDetailScreen() {
         .finally(() => setLoading(false));
     }
   }, [db, id, searchParams, user]);
+
+  const splits = useMemo(() => {
+    if (loading || isFriendRun || !run || !routePoints || routePoints.length < 2) return [];
+    return computeRouteSplits(routePoints, settings.units);
+  }, [loading, isFriendRun, run, routePoints, settings.units]);
 
   if (loading) {
     return (
@@ -223,6 +230,10 @@ export function RunDetailScreen() {
         {/* ── Route map ────────────────────────────────────────── */}
         {!isFriendRun && run.has_route && routePoints && (
           <RunRouteMap points={routePoints} />
+        )}
+
+        {splits.length > 0 && (
+          <RunSplitsSection splits={splits} unit={settings.units} />
         )}
 
         {/* ── Health metrics ───────────────────────────────────── */}
