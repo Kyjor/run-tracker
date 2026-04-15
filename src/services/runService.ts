@@ -18,7 +18,7 @@ export interface CreateRunInput {
   run_type: RunType;
   plan_day_id?: string | null;
   notes?: string;
-  source?: 'manual' | 'healthkit';
+  source?: 'manual' | 'healthkit' | 'fit';
 
   // Heart Rate
   avg_heart_rate?: number | null;

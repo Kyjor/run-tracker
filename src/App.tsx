@@ -1,5 +1,7 @@
 import { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
+import { listen } from '@tauri-apps/api/event';
+import { invoke } from '@tauri-apps/api/core';
 import { useAuth } from './contexts/AuthContext';
 import { syncToCloud, pullFromCloud } from './services/syncService';
 
@@ -38,6 +40,8 @@ import { CommunityPlanDetailScreen } from './screens/CommunityPlanDetailScreen';
 import { RunDetailScreen } from './screens/RunDetailScreen';
 import { LogEntryScreen } from './screens/LogEntryScreen';
 import { LiveRunScreen } from './screens/LiveRunScreen';
+import { FitImportScreen } from './screens/FitImportScreen';
+import type { PendingFitFilePayload } from './services/fitImportService';
 
 // ---------------------------------------------------------------------------
 // Gate: show splash until DB is ready, redirect to onboarding if needed
@@ -84,6 +88,38 @@ function AppShell() {
     }
   }, [isLoaded, settings.onboarding_complete, user, location.pathname]);
 
+  useEffect(() => {
+    let cancelled = false;
+    let unlisten: (() => void) | undefined;
+
+    async function consumeAndNavigateToFitImporter() {
+      try {
+        const payload = await invoke<PendingFitFilePayload | null>('consume_pending_fit_file');
+        if (!payload || cancelled) return;
+        navigate('/log/import-fit', {
+          state: { pendingFit: payload },
+        });
+      } catch {
+        // no-op: command may not be available on all platforms
+      }
+    }
+
+    void consumeAndNavigateToFitImporter();
+
+    void listen<{ file_name: string }>('fit-import-pending', () => {
+      void consumeAndNavigateToFitImporter();
+    }).then(fn => {
+      unlisten = fn;
+    }).catch(() => {
+      // no-op
+    });
+
+    return () => {
+      cancelled = true;
+      if (unlisten) unlisten();
+    };
+  }, [navigate]);
+
   if (!isReady || !isLoaded) {
         return (
       <div className="min-h-screen bg-white dark:bg-gray-900 flex items-center justify-center flex-col gap-4">
@@ -129,6 +165,7 @@ function AppShell() {
           <Route path="/log/manual" element={<LogRunScreen />} />
           <Route path="/log/edit/:id" element={<LogRunScreen />} />
           <Route path="/log/live" element={<LiveRunScreen />} />
+          <Route path="/log/import-fit" element={<FitImportScreen />} />
           <Route path="/runs/:id" element={<RunDetailScreen />} />
           <Route path="/stats" element={<StatsScreen />} />
           <Route path="/profile" element={<ProfileScreen />} />

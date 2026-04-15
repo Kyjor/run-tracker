@@ -3,6 +3,15 @@
   "identifier": "mobile-capability",
   "windows": ["main"],
   "platforms": ["iOS", "android"],
-  "permissions": []
+  "permissions": [
+    "core:default",
+    "core:event:default",
+    "sql:default",
+    "sql:allow-load",
+    "sql:allow-execute",
+    "sql:allow-select",
+    "sql:allow-close",
+    "notification:default"
+  ]
 }
 

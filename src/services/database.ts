@@ -84,8 +84,20 @@ CREATE TABLE IF NOT EXISTS sync_queue (
   created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS fit_imports (
+  id          TEXT PRIMARY KEY,
+  run_id      TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+  file_name   TEXT NOT NULL,
+  source_path TEXT,
+  parsed_json TEXT NOT NULL,
+  summary_json TEXT,
+  created_at  TEXT NOT NULL,
+  sync_status TEXT NOT NULL DEFAULT 'local'
+);
+
 CREATE INDEX IF NOT EXISTS idx_runs_date       ON runs(date);
 CREATE INDEX IF NOT EXISTS idx_plan_days_plan  ON plan_days(plan_id, week_number, day_of_week);
+CREATE INDEX IF NOT EXISTS idx_fit_imports_run ON fit_imports(run_id);
 `;
 
 // Migrations: run once per version, safe to retry (errors are swallowed)
@@ -135,6 +147,19 @@ const MIGRATIONS = [
   `UPDATE runs SET date = date || 'T' || substr(created_at, 12, 8) || 'Z' WHERE length(date) = 10 AND date NOT LIKE '%T%'`,
   // For any remaining date-only values (if created_at doesn't have time), use noon UTC
   `UPDATE runs SET date = date || 'T12:00:00Z' WHERE length(date) = 10 AND date NOT LIKE '%T%'`,
+
+  // v9 — Persist raw FIT import payloads for replay and richer previews
+  `CREATE TABLE IF NOT EXISTS fit_imports (
+    id          TEXT PRIMARY KEY,
+    run_id      TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+    file_name   TEXT NOT NULL,
+    source_path TEXT,
+    parsed_json TEXT NOT NULL,
+    summary_json TEXT,
+    created_at  TEXT NOT NULL,
+    sync_status TEXT NOT NULL DEFAULT 'local'
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_fit_imports_run ON fit_imports(run_id)`,
 ];
 
 // ---------------------------------------------------------------------------

@@ -154,7 +154,7 @@ export interface Run {
   run_type: RunType;
   plan_day_id: string | null;
   notes: string;
-  source: 'manual' | 'healthkit';
+  source: 'manual' | 'healthkit' | 'fit';
 
   // ── Heart Rate ──────────────────────────────────────────
   avg_heart_rate: number | null;
@@ -383,6 +383,64 @@ export interface RunCsvRow {
   type: string;
   planned: 'yes' | 'no';
   notes: string;
+}
+
+export interface FitImportRecord {
+  lat?: number;
+  lng?: number;
+  altitude_meters?: number | null;
+  timestamp?: string | null;
+  elapsed_seconds?: number | null;
+  distance_meters?: number | null;
+  heart_rate?: number | null;
+  cadence_spm?: number | null;
+  power_watts?: number | null;
+  temperature_celsius?: number | null;
+  speed_mps?: number | null;
+}
+
+export interface FitPreviewMetric {
+  label: string;
+  value: string;
+}
+
+export interface FitImportPreview {
+  id: string;
+  file_name: string;
+  source_path: string | null;
+  started_at: string;
+  ended_at: string | null;
+  sport: string;
+  sub_sport: string | null;
+  total_distance_meters: number | null;
+  total_elapsed_seconds: number | null;
+  total_timer_seconds: number | null;
+  calories: number | null;
+  avg_heart_rate: number | null;
+  max_heart_rate: number | null;
+  avg_cadence: number | null;
+  avg_power_watts: number | null;
+  max_power_watts: number | null;
+  elevation_gain_meters: number | null;
+  elevation_loss_meters: number | null;
+  vo2_max: number | null;
+  temperature_celsius: number | null;
+  records_count: number;
+  laps_count: number;
+  has_route: boolean;
+  route_points: RoutePoint[];
+  fit_records: FitImportRecord[];
+  metrics: FitPreviewMetric[];
+  raw_payload: Record<string, unknown>;
+  raw_summary: Record<string, unknown>;
+  duplicate_of_run_id: string | null;
+}
+
+export interface FitImportResult {
+  preview_id: string;
+  run_id?: string;
+  status: 'imported' | 'skipped_duplicate' | 'failed';
+  message?: string;
 }
 
 // ============================================================

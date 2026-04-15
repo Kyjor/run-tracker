@@ -41,6 +41,22 @@ export function LogEntryScreen() {
             </div>
           </div>
         </Card>
+
+        <Card onClick={() => navigate('/log/import-fit')}>
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center">
+              <span className="text-xl">📥</span>
+            </div>
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-gray-900 dark:text-gray-50">
+                Import FIT workout
+              </p>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                Select a .fit file, preview the metrics, and import workouts into your log.
+              </p>
+            </div>
+          </div>
+        </Card>
       </div>
     </div>
   );

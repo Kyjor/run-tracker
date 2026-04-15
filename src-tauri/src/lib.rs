@@ -1,4 +1,24 @@
 use serde::{Deserialize, Serialize};
+use std::sync::{Mutex, OnceLock};
+use tauri::Emitter;
+
+#[derive(Debug, Clone, Serialize)]
+struct PendingFitFile {
+    file_name: String,
+    source_path: Option<String>,
+    base64_data: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct FitImportEventPayload {
+    file_name: String,
+}
+
+static PENDING_FIT_FILE: OnceLock<Mutex<Option<PendingFitFile>>> = OnceLock::new();
+
+fn pending_fit_file() -> &'static Mutex<Option<PendingFitFile>> {
+    PENDING_FIT_FILE.get_or_init(|| Mutex::new(None))
+}
 
 // ---------------------------------------------------------------------------
 // Swift FFI declarations (iOS only)
@@ -184,6 +204,7 @@ async fn fetch_workout_details(
     #[cfg(not(target_os = "ios"))]
     {
         // Mock data for development/testing on Mac
+        let _ = workout_id;
         let _ = max_heart_rate_bpm;
         
         // Return mock details for any workout ID
@@ -210,16 +231,97 @@ async fn fetch_workout_details(
     }
 }
 
+#[tauri::command]
+async fn consume_pending_fit_file() -> Result<Option<PendingFitFile>, String> {
+    let mut lock = pending_fit_file()
+        .lock()
+        .map_err(|_| String::from("failed to lock pending FIT file state"))?;
+    Ok(lock.take())
+}
+
+fn stage_fit_file_from_url(url: &tauri::Url) -> Option<PendingFitFile> {
+    if url.scheme() != "file" {
+        return None;
+    }
+
+    let path = url.to_file_path().ok()?;
+    let extension = path
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .map(|ext| ext.to_lowercase());
+    if extension.as_deref() != Some("fit") {
+        return None;
+    }
+
+    let bytes = std::fs::read(&path).ok()?;
+    let file_name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("workout.fit")
+        .to_string();
+    let source_path = Some(path.to_string_lossy().to_string());
+    let base64_data = base64::encode(bytes);
+
+    Some(PendingFitFile {
+        file_name,
+        source_path,
+        base64_data,
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::stage_fit_file_from_url;
+    use std::fs;
+
+    #[test]
+    fn ignores_non_fit_extensions() {
+        let url = tauri::Url::parse("file:///tmp/workout.gpx").expect("valid url");
+        assert!(stage_fit_file_from_url(&url).is_none());
+    }
+
+    #[test]
+    fn stages_fit_file_payload() {
+        let path = std::env::temp_dir().join("rwf-fit-test.fit");
+        fs::write(&path, [0x10, 0x20, 0x30, 0x40]).expect("temp fit write");
+        let url = tauri::Url::from_file_path(&path).expect("file url");
+
+        let staged = stage_fit_file_from_url(&url).expect("staged payload");
+        assert_eq!(staged.file_name, "rwf-fit-test.fit");
+        assert!(!staged.base64_data.is_empty());
+
+        let _ = fs::remove_file(path);
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         .plugin(tauri_plugin_sql::Builder::new().build())
         .plugin(tauri_plugin_notification::init())
         .invoke_handler(tauri::generate_handler![
             request_healthkit_permission,
             fetch_healthkit_workouts,
             fetch_workout_details,
+            consume_pending_fit_file,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application");
+
+    app.run(|app_handle, event| {
+        if let tauri::RunEvent::Opened { urls } = event {
+            for url in urls {
+                if let Some(pending) = stage_fit_file_from_url(&url) {
+                    if let Ok(mut lock) = pending_fit_file().lock() {
+                        let file_name = pending.file_name.clone();
+                        *lock = Some(pending);
+                        let _ = app_handle.emit(
+                            "fit-import-pending",
+                            FitImportEventPayload { file_name },
+                        );
+                    }
+                }
+            }
+        }
+    });
 }

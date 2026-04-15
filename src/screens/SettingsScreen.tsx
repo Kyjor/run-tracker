@@ -330,6 +330,19 @@ export function SettingsScreen() {
         {/* Apple Health */}
         <div>
           <SectionHeader title="Apple Health" />
+          <Card className="mb-3">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium text-gray-900 dark:text-gray-100">Import FIT files</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                  Import workouts from Garmin, Coros, and other FIT-compatible devices.
+                </p>
+              </div>
+              <Button size="sm" variant="secondary" onClick={() => navigate('/log/import-fit')}>
+                Open Importer
+              </Button>
+            </div>
+          </Card>
           <HealthKitSection />
         </div>
 
