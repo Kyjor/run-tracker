@@ -386,6 +386,103 @@ export interface RunCsvRow {
 }
 
 // ============================================================
+// Nutrition Models
+// ============================================================
+
+export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack';
+
+export interface Food {
+  id: string;
+  name: string;
+  brand: string | null;
+  calories_per_100g: number;
+  protein_per_100g: number;
+  carbs_per_100g: number;
+  fats_per_100g: number;
+  fiber_per_100g: number;
+  is_custom: number;
+  created_at: string;
+  updated_at: string;
+  sync_status: SyncStatus;
+}
+
+export interface Meal {
+  id: string;
+  date: string;
+  meal_type: MealType;
+  food_id: string;
+  amount_grams: number;
+  created_at: string;
+  sync_status: SyncStatus;
+}
+
+export interface MealWithFood extends Meal {
+  food: Food;
+  calories: number;
+  protein: number;
+  carbs: number;
+  fats: number;
+  fiber: number;
+}
+
+export interface WeightEntry {
+  id: string;
+  date: string;
+  weight_kg: number;
+  body_fat_percent: number | null;
+  source: 'manual' | 'healthkit';
+  created_at: string;
+  sync_status: SyncStatus;
+}
+
+export type NutritionGoalType = 'lose' | 'maintain' | 'gain';
+
+export interface NutritionGoal {
+  id: string;
+  target_calories: number | null;
+  target_protein_g: number | null;
+  target_carbs_g: number | null;
+  target_fats_g: number | null;
+  goal_type: NutritionGoalType;
+  start_date: string;
+  end_date: string | null;
+  is_active: number;
+  created_at: string;
+  updated_at: string;
+  sync_status: SyncStatus;
+}
+
+export interface DailyNutrition {
+  date: string;
+  calories: number;
+  protein: number;
+  carbs: number;
+  fats: number;
+  fiber: number;
+  meals: MealWithFood[];
+}
+
+export interface TDEEEstimate {
+  tdee: number;
+  bmr: number;
+  activity_factor: number;
+  confidence: 'low' | 'medium' | 'high';
+  data_points: number;
+  date_range: {
+    start: string;
+    end: string;
+  };
+}
+
+export interface MacroRecommendation {
+  calories: number;
+  protein: number;
+  carbs: number;
+  fats: number;
+  rationale: string;
+}
+
+// ============================================================
 // Computed / View Types (derived, not stored)
 // ============================================================
 
