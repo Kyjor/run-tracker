@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { DistanceUnit, RoutePoint, RunType } from '../types';
+import type { DistanceUnit, RunType } from '../types';
 import { Header } from '../components/navigation/Header';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
@@ -15,13 +15,27 @@ import { createRun } from '../services/runService';
 import { publishFeedActivity } from '../services/socialService';
 import { syncToCloud } from '../services/syncService';
 import { generateId } from '../utils/generateId';
-import { haversineMeters } from '../utils/geoUtils';
 import { formatDistance, formatDuration, formatPace, calcPaceSeconds } from '../utils/paceUtils';
+import {
+  getLiveRunSnapshot,
+  isNativeLiveTrackingAvailable,
+  requestLocationPermission,
+  startLiveRun,
+  stopLiveRun,
+  subscribeLiveRunUpdates,
+  type LiveRunSnapshot,
+} from '../services/liveRunTrackingService';
 
 type SessionState = 'idle' | 'running' | 'saving';
 
-interface LivePoint extends RoutePoint {
-  accuracy?: number;
+function applySnapshot(snapshot: LiveRunSnapshot) {
+  return {
+    points: snapshot.points,
+    distanceMeters: snapshot.distance_meters,
+    elapsedSeconds: Math.floor(snapshot.elapsed_seconds),
+    permissionWarning: snapshot.permission_warning ?? null,
+    isRunning: snapshot.state === 'running',
+  };
 }
 
 export function LiveRunScreen() {
@@ -33,14 +47,12 @@ export function LiveRunScreen() {
   const { session } = useAuth();
 
   const [sessionState, setSessionState] = useState<SessionState>('idle');
-  const [points, setPoints] = useState<LivePoint[]>([]);
+  const [points, setPoints] = useState<LiveRunSnapshot['points']>([]);
   const [distanceMeters, setDistanceMeters] = useState(0);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [error, setError] = useState<string | null>(null);
-
-  const watchIdRef = useRef<number | null>(null);
-  const timerIdRef = useRef<number | null>(null);
-  const startTimeRef = useRef<number | null>(null);
+  const [permissionWarning, setPermissionWarning] = useState<string | null>(null);
+  const [usesNativeTracking, setUsesNativeTracking] = useState(false);
 
   const unit: DistanceUnit = settings.units;
 
@@ -55,120 +67,115 @@ export function LiveRunScreen() {
   );
 
   const lastPoint = points.length > 0 ? points[points.length - 1] : null;
+  const isRunning = sessionState === 'running';
+
+  const syncFromSnapshot = useRef((snapshot: LiveRunSnapshot) => {
+    const next = applySnapshot(snapshot);
+    setPoints(next.points);
+    setDistanceMeters(next.distanceMeters);
+    setElapsedSeconds(next.elapsedSeconds);
+    setPermissionWarning(next.permissionWarning);
+    setSessionState(next.isRunning ? 'running' : 'idle');
+  }).current;
 
   useEffect(() => {
-    return () => {
-      stopWatch();
-      stopTimer();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    let cancelled = false;
+    let unlisten: (() => void) | undefined;
+    let pollId: number | undefined;
 
-  function startTimer() {
-    if (timerIdRef.current != null) return;
-    startTimeRef.current = Date.now();
-    setElapsedSeconds(0);
-    const id = window.setInterval(() => {
-      if (startTimeRef.current == null) return;
-      const diff = Math.floor((Date.now() - startTimeRef.current) / 1000);
-      setElapsedSeconds(diff);
-    }, 1000);
-    timerIdRef.current = id;
-  }
+    async function init() {
+      const native = await isNativeLiveTrackingAvailable();
+      if (cancelled) return;
+      setUsesNativeTracking(native);
 
-  function stopTimer() {
-    if (timerIdRef.current != null) {
-      window.clearInterval(timerIdRef.current);
-      timerIdRef.current = null;
-    }
-  }
+      const snapshot = await getLiveRunSnapshot();
+      if (cancelled) return;
+      syncFromSnapshot(snapshot);
 
-  function startWatch() {
-    if (typeof navigator === 'undefined' || !navigator.geolocation) {
-      setError('Location is not available on this device.');
-      return;
-    }
+      unlisten = await subscribeLiveRunUpdates((next) => {
+        if (!cancelled) syncFromSnapshot(next);
+      });
 
-    setError(null);
-    const id = navigator.geolocation.watchPosition(
-      (pos) => {
-        const { latitude, longitude, accuracy } = pos.coords;
-        const t = Date.now();
-        setPoints((prev) => {
-          const nextPoint: LivePoint = { lat: latitude, lng: longitude, t, accuracy: accuracy ?? undefined };
-          if (prev.length === 0) {
-            return [nextPoint];
-          }
-          const last = prev[prev.length - 1];
-          const extra = haversineMeters(last, nextPoint);
-          if (extra > 0) {
-            setDistanceMeters((d) => d + extra);
-          }
-          return [...prev, nextPoint];
+      pollId = window.setInterval(() => {
+        void getLiveRunSnapshot().then((next) => {
+          if (!cancelled) syncFromSnapshot(next);
         });
-      },
-      (err) => {
-        setError(err.message);
-      },
-      {
-        enableHighAccuracy: true,
-        maximumAge: 1000,
-      },
-    );
-    watchIdRef.current = id;
-  }
-
-  function stopWatch() {
-    if (watchIdRef.current != null && navigator.geolocation) {
-      navigator.geolocation.clearWatch(watchIdRef.current);
-      watchIdRef.current = null;
+      }, 2000);
     }
-  }
+
+    void init();
+
+    return () => {
+      cancelled = true;
+      if (unlisten) unlisten();
+      if (pollId != null) window.clearInterval(pollId);
+    };
+  }, [syncFromSnapshot]);
 
   async function handleStart() {
     if (sessionState === 'running') return;
-    setPoints([]);
-    setDistanceMeters(0);
-    setElapsedSeconds(0);
-    startWatch();
-    startTimer();
-    setSessionState('running');
+
+    try {
+      setError(null);
+      const native = await isNativeLiveTrackingAvailable();
+      setUsesNativeTracking(native);
+      const permission = await requestLocationPermission();
+      if (permission === 'denied') {
+        throw new Error('Location permission is required to track a live run.');
+      }
+
+      const snapshot = await startLiveRun();
+      syncFromSnapshot(snapshot);
+
+      if (permission === 'when_in_use' && native) {
+        setPermissionWarning(
+          'Background tracking may stop when the phone is locked. Enable Always location in Settings for reliable tracking.',
+        );
+      }
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      setError(message);
+      showToast('Could not start live run', 'error');
+    }
   }
 
   async function handleEnd() {
     if (sessionState !== 'running') return;
-    stopWatch();
-    stopTimer();
     setSessionState('saving');
 
     try {
+      const snapshot = await stopLiveRun();
+
       if (!db) {
         throw new Error('Database is not ready');
       }
-      if (distanceMeters <= 0 || elapsedSeconds <= 0) {
+      if (snapshot.distance_meters <= 0 || snapshot.elapsed_seconds <= 0) {
         throw new Error('Need some movement and time to save a run.');
       }
 
+      const saveDistanceValue = unit === 'mi'
+        ? snapshot.distance_meters / 1609.34
+        : snapshot.distance_meters / 1000;
+      const roundedDistance = Math.round(saveDistanceValue * 100) / 100;
       const nowIso = new Date().toISOString();
-      const roundedDistance = Math.round(distanceValue * 100) / 100;
       const runType: RunType = 'easy_run';
 
       const run = await createRun(db, {
         date: nowIso,
         distance_value: roundedDistance,
         distance_unit: unit,
-        duration_seconds: elapsedSeconds,
+        duration_seconds: Math.floor(snapshot.elapsed_seconds),
         run_type: runType,
         notes: '',
         source: 'manual',
-        has_route: points.length > 0 ? 1 : 0,
+        has_route: snapshot.points.length > 0 ? 1 : 0,
       });
 
-      if (points.length > 0) {
+      if (snapshot.points.length > 0) {
         const routeId = generateId();
         await db.execute(
           'INSERT INTO run_routes (id, run_id, points_json, created_at) VALUES ($1, $2, $3, $4)',
-          [routeId, run.id, JSON.stringify(points), nowIso],
+          [routeId, run.id, JSON.stringify(snapshot.points), nowIso],
         );
       }
 
@@ -194,17 +201,11 @@ export function LiveRunScreen() {
       setError(message);
       showToast('Could not save live run', 'error');
       setSessionState('idle');
-    } finally {
-      stopWatch();
-      stopTimer();
     }
   }
 
-  const isRunning = sessionState === 'running';
-
   return (
     <div className="flex flex-col flex-1 overflow-y-auto pb-24">
-      {/* While a live run is active, disable the back button so the user can't leave the screen */}
       <Header title="Live Run" showBack={!isRunning} />
 
       <div className="px-4 pt-4 flex flex-col gap-4">
@@ -238,15 +239,15 @@ export function LiveRunScreen() {
                   }`
                 : 'Waiting for GPS fix...'}
             </p>
+            {permissionWarning && (
+              <p className="text-xs text-amber-600 dark:text-amber-400">{permissionWarning}</p>
+            )}
             {error && (
-              <p className="text-xs text-red-500">
-                {error}
-              </p>
+              <p className="text-xs text-red-500">{error}</p>
             )}
           </div>
         </Card>
 
-        {/* Live route map */}
         {isRunning && (
           <RunRouteMap points={points} followLatest className="h-64" />
         )}
@@ -269,8 +270,9 @@ export function LiveRunScreen() {
                 </Button>
                 {!isRunning && (
                   <p className="text-xs text-gray-500 dark:text-gray-400 text-center">
-                    Live tracking uses your phone&apos;s GPS while this screen is open. For best accuracy, keep
-                    the app in the foreground.
+                    {usesNativeTracking
+                      ? 'Live tracking continues in the background when you lock your phone or switch apps. Tap the banner to return to your run.'
+                      : 'Live tracking uses your browser GPS while this screen is open.'}
                   </p>
                 )}
               </>
@@ -281,4 +283,3 @@ export function LiveRunScreen() {
     </div>
   );
 }
-

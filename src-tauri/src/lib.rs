@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::sync::{Mutex, OnceLock};
-use tauri::Emitter;
+use tauri::{AppHandle, Emitter};
 
 #[derive(Debug, Clone, Serialize)]
 struct PendingFitFile {
@@ -15,6 +15,7 @@ struct FitImportEventPayload {
 }
 
 static PENDING_FIT_FILE: OnceLock<Mutex<Option<PendingFitFile>>> = OnceLock::new();
+static APP_HANDLE: OnceLock<AppHandle> = OnceLock::new();
 
 fn pending_fit_file() -> &'static Mutex<Option<PendingFitFile>> {
     PENDING_FIT_FILE.get_or_init(|| Mutex::new(None))
@@ -46,6 +47,117 @@ extern "C" {
         result_ptr: *mut *mut std::ffi::c_char,
         result_len: *mut usize,
     ) -> i32;
+}
+
+#[cfg(target_os = "ios")]
+extern "C" {
+    #[link_name = "register_live_run_callback"]
+    fn lt_register_callback(callback: Option<extern "C" fn(*mut std::ffi::c_char)>);
+
+    #[link_name = "request_location_permission"]
+    fn lt_request_permission(
+        result_ptr: *mut *mut std::ffi::c_char,
+        result_len: *mut usize,
+    ) -> i32;
+
+    #[link_name = "start_live_run"]
+    fn lt_start_live_run() -> i32;
+
+    #[link_name = "stop_live_run"]
+    fn lt_stop_live_run(
+        result_ptr: *mut *mut std::ffi::c_char,
+        result_len: *mut usize,
+    ) -> i32;
+
+    #[link_name = "cancel_live_run"]
+    fn lt_cancel_live_run() -> i32;
+
+    #[link_name = "get_live_run_snapshot"]
+    fn lt_get_live_run_snapshot(
+        result_ptr: *mut *mut std::ffi::c_char,
+        result_len: *mut usize,
+    ) -> i32;
+}
+
+// ---------------------------------------------------------------------------
+// Live run tracking
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LiveRoutePoint {
+    pub lat: f64,
+    pub lng: f64,
+    pub alt: Option<f64>,
+    pub t: Option<f64>,
+    pub accuracy: Option<f64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LiveRunSnapshot {
+    pub state: String,
+    pub started_at_ms: f64,
+    pub elapsed_seconds: f64,
+    pub distance_meters: f64,
+    pub points: Vec<LiveRoutePoint>,
+    pub last_point: Option<LiveRoutePoint>,
+    pub permission_warning: Option<String>,
+}
+
+impl LiveRunSnapshot {
+    fn idle() -> Self {
+        Self {
+            state: "idle".to_string(),
+            started_at_ms: 0.0,
+            elapsed_seconds: 0.0,
+            distance_meters: 0.0,
+            points: Vec::new(),
+            last_point: None,
+            permission_warning: None,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct LocationPermissionResponse {
+    status: String,
+}
+
+fn take_ffi_json(result_ptr: *mut std::ffi::c_char) -> Result<String, String> {
+    if result_ptr.is_null() {
+        return Err(String::from("null native result"));
+    }
+    let json = unsafe {
+        std::ffi::CStr::from_ptr(result_ptr)
+            .to_string_lossy()
+            .into_owned()
+    };
+    unsafe { libc::free(result_ptr as *mut libc::c_void) };
+    Ok(json)
+}
+
+fn call_ffi_json<F>(mut call: F) -> Result<String, String>
+where
+    F: FnMut(*mut *mut std::ffi::c_char, *mut usize) -> i32,
+{
+    let mut result_ptr: *mut std::ffi::c_char = std::ptr::null_mut();
+    let mut result_len: usize = 0;
+    let code = call(&mut result_ptr, &mut result_len);
+    if code < 0 {
+        return Err(format!("native call failed (code {})", code));
+    }
+    take_ffi_json(result_ptr)
+}
+
+#[cfg(target_os = "ios")]
+extern "C" fn live_run_session_updated(json_ptr: *mut std::ffi::c_char) {
+    let Ok(json) = take_ffi_json(json_ptr) else {
+        return;
+    };
+    if let Ok(snapshot) = serde_json::from_str::<LiveRunSnapshot>(&json) {
+        if let Some(handle) = APP_HANDLE.get() {
+            let _ = handle.emit("live-run-tick", snapshot);
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -239,6 +351,90 @@ async fn consume_pending_fit_file() -> Result<Option<PendingFitFile>, String> {
     Ok(lock.take())
 }
 
+#[tauri::command]
+async fn is_native_live_tracking_available() -> bool {
+    cfg!(target_os = "ios")
+}
+
+#[tauri::command]
+async fn request_location_permission() -> Result<String, String> {
+    #[cfg(target_os = "ios")]
+    {
+        let json = call_ffi_json(|result_ptr, result_len| unsafe {
+            lt_request_permission(result_ptr, result_len)
+        })?;
+        let parsed: LocationPermissionResponse =
+            serde_json::from_str(&json).map_err(|e| format!("Parse error: {}", e))?;
+        Ok(parsed.status)
+    }
+    #[cfg(not(target_os = "ios"))]
+    {
+        Ok(String::from("denied"))
+    }
+}
+
+#[tauri::command]
+async fn start_live_run() -> Result<(), String> {
+    #[cfg(target_os = "ios")]
+    {
+        let code = unsafe { lt_start_live_run() };
+        if code < 0 {
+            return Err(String::from("Location permission denied or unavailable"));
+        }
+        Ok(())
+    }
+    #[cfg(not(target_os = "ios"))]
+    {
+        Err(String::from("Native live tracking is only available on iOS"))
+    }
+}
+
+#[tauri::command]
+async fn stop_live_run() -> Result<LiveRunSnapshot, String> {
+    #[cfg(target_os = "ios")]
+    {
+        let json = call_ffi_json(|result_ptr, result_len| unsafe {
+            lt_stop_live_run(result_ptr, result_len)
+        })?;
+        serde_json::from_str(&json).map_err(|e| format!("Parse error: {}", e))
+    }
+    #[cfg(not(target_os = "ios"))]
+    {
+        Err(String::from("Native live tracking is only available on iOS"))
+    }
+}
+
+#[tauri::command]
+async fn cancel_live_run() -> Result<(), String> {
+    #[cfg(target_os = "ios")]
+    {
+        let code = unsafe { lt_cancel_live_run() };
+        if code < 0 {
+            return Err(format!("cancel_live_run failed (code {})", code));
+        }
+        Ok(())
+    }
+    #[cfg(not(target_os = "ios"))]
+    {
+        Ok(())
+    }
+}
+
+#[tauri::command]
+async fn get_live_run_snapshot() -> Result<LiveRunSnapshot, String> {
+    #[cfg(target_os = "ios")]
+    {
+        let json = call_ffi_json(|result_ptr, result_len| unsafe {
+            lt_get_live_run_snapshot(result_ptr, result_len)
+        })?;
+        serde_json::from_str(&json).map_err(|e| format!("Parse error: {}", e))
+    }
+    #[cfg(not(target_os = "ios"))]
+    {
+        Ok(LiveRunSnapshot::idle())
+    }
+}
+
 fn stage_fit_file_from_url(url: &tauri::Url) -> Option<PendingFitFile> {
     if url.scheme() != "file" {
         return None;
@@ -299,11 +495,25 @@ pub fn run() {
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_sql::Builder::new().build())
         .plugin(tauri_plugin_notification::init())
+        .setup(|app| {
+            APP_HANDLE.set(app.handle().clone()).ok();
+            #[cfg(target_os = "ios")]
+            unsafe {
+                lt_register_callback(Some(live_run_session_updated));
+            }
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             request_healthkit_permission,
             fetch_healthkit_workouts,
             fetch_workout_details,
             consume_pending_fit_file,
+            is_native_live_tracking_available,
+            request_location_permission,
+            start_live_run,
+            stop_live_run,
+            cancel_live_run,
+            get_live_run_snapshot,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");

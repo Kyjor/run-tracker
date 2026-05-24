@@ -41,6 +41,7 @@ import { RunDetailScreen } from './screens/RunDetailScreen';
 import { LogEntryScreen } from './screens/LogEntryScreen';
 import { LiveRunScreen } from './screens/LiveRunScreen';
 import { FitImportScreen } from './screens/FitImportScreen';
+import { ActiveRunBanner } from './components/run/ActiveRunBanner';
 import type { PendingFitFilePayload } from './services/fitImportService';
 
 // ---------------------------------------------------------------------------
@@ -188,6 +189,8 @@ function AppShell() {
           <Route path="/community/:id" element={<CommunityPlanDetailScreen />} />
         </Routes>
       </div>
+
+      <ActiveRunBanner />
 
       {/* Tab bar only on main routes (exclude live run) */}
       {showTabBar && <TabBar />}

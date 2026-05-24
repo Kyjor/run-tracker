@@ -16,6 +16,8 @@
 		8A8E07E5DC74023CD44351F5 /* CoreGraphics.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = ED31604C72E9A72E1F829D2C /* CoreGraphics.framework */; };
 		9C0A0D338C02F9A20403E13B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = F8716191774CDF27BCDEC903 /* Assets.xcassets */; };
 		AA11223344556677889900AA /* HealthKitBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB11223344556677889900BB /* HealthKitBridge.swift */; };
+		EE11223344556677889900EE /* LocationTrackingBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF11223344556677889900FF /* LocationTrackingBridge.swift */; };
+		FF22334455667788990011AA /* CoreLocation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = FF22334455667788990011BB /* CoreLocation.framework */; };
 		CC11223344556677889900CC /* HealthKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = DD11223344556677889900DD /* HealthKit.framework */; };
 		D1CC027CDCB2E23BC2CB7400 /* libapp.a in Frameworks */ = {isa = PBXBuildFile; fileRef = AB8FC300930C0BBDD4BE9DDD /* libapp.a */; };
 		E3FA0513E9E7612E6221EA3D /* Metal.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = DBCDB643916B01C7E533DDD3 /* Metal.framework */; };
@@ -37,6 +39,8 @@
 		AB8FC300930C0BBDD4BE9DDD /* libapp.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; path = libapp.a; sourceTree = "<group>"; };
 		B7D4454F691AA34FB04B2C6A /* bindings.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = bindings.h; sourceTree = "<group>"; };
 		BB11223344556677889900BB /* HealthKitBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthKitBridge.swift; sourceTree = SOURCE_ROOT; };
+		FF11223344556677889900FF /* LocationTrackingBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationTrackingBridge.swift; sourceTree = SOURCE_ROOT; };
+		FF22334455667788990011BB /* CoreLocation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreLocation.framework; path = System/Library/Frameworks/CoreLocation.framework; sourceTree = SDKROOT; };
 		CC221A14E99790EB6CA82C88 /* QuartzCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = QuartzCore.framework; path = System/Library/Frameworks/QuartzCore.framework; sourceTree = SDKROOT; };
 		CE7BCCAE9B6A9A63431CCF5D /* run-with-friends_iOS.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "run-with-friends_iOS.entitlements"; sourceTree = "<group>"; };
 		D7A7DBA0FE33596A8D01E5CD /* Security.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Security.framework; path = System/Library/Frameworks/Security.framework; sourceTree = SDKROOT; };
@@ -61,6 +65,7 @@
 				FAE916A5E3B0424CEEE3A484 /* UIKit.framework in Frameworks */,
 				48D94D53681F7317BA85EDBA /* WebKit.framework in Frameworks */,
 				CC11223344556677889900CC /* HealthKit.framework in Frameworks */,
+				FF22334455667788990011AA /* CoreLocation.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -99,6 +104,7 @@
 				D89C292F3535EC98FFBDBFD7 /* Products */,
 				731AA93C2F4CDFD200FBA4AE /* run-with-friends_iOS-Bridging-Header.h */,
 				BB11223344556677889900BB /* HealthKitBridge.swift */,
+				FF11223344556677889900FF /* LocationTrackingBridge.swift */,
 			);
 			sourceTree = "<group>";
 		};
@@ -259,6 +265,7 @@
 			files = (
 				31A60770D0C6B0CD87DAF6DE /* main.mm in Sources */,
 				AA11223344556677889900AA /* HealthKitBridge.swift in Sources */,
+				EE11223344556677889900EE /* LocationTrackingBridge.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
