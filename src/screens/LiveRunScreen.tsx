@@ -246,9 +246,9 @@ export function LiveRunScreen() {
           </div>
         </Card>
 
-        {/* Live route preview */}
-        {points.length > 1 && (
-          <RunRouteMap points={points} />
+        {/* Live route map */}
+        {isRunning && (
+          <RunRouteMap points={points} followLatest className="h-64" />
         )}
 
         <Card>

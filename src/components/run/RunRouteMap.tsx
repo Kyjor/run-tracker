@@ -1,73 +1,213 @@
+import { useEffect, useRef } from 'react';
+import maplibregl from 'maplibre-gl';
+import maplibreWorker from 'maplibre-gl/dist/maplibre-gl-csp-worker.js?url';
+import 'maplibre-gl/dist/maplibre-gl.css';
 import type { RoutePoint } from '../../types';
+import { getMapStyle, ROUTE_COLORS, ROUTE_LINE_PAINT } from '../../config/mapStyles';
+
+maplibregl.setWorkerUrl(maplibreWorker);
+
+const ROUTE_SOURCE = 'route';
+const START_SOURCE = 'start';
+const END_SOURCE = 'end';
+
+const EMPTY_LINE: GeoJSON.Feature<GeoJSON.LineString> = {
+  type: 'Feature',
+  properties: {},
+  geometry: { type: 'LineString', coordinates: [] },
+};
+
+const EMPTY_POINTS: GeoJSON.FeatureCollection = {
+  type: 'FeatureCollection',
+  features: [],
+};
 
 interface RunRouteMapProps {
   points: RoutePoint[];
   className?: string;
+  followLatest?: boolean;
 }
 
-export function RunRouteMap({ points, className = '' }: RunRouteMapProps) {
-  if (!points || points.length < 2) {
-    return (
-      <div className={['h-40 w-full rounded-2xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center', className].join(' ')}>
-        <span className="text-xs text-gray-400">Route data not available.</span>
-      </div>
-    );
-  }
+function toLineGeoJSON(points: RoutePoint[]): GeoJSON.Feature<GeoJSON.LineString> {
+  return {
+    type: 'Feature',
+    properties: {},
+    geometry: {
+      type: 'LineString',
+      coordinates: points.map((p) => [p.lng, p.lat]),
+    },
+  };
+}
 
-  let minLat = points[0].lat;
-  let maxLat = points[0].lat;
-  let minLng = points[0].lng;
-  let maxLng = points[0].lng;
+function toPointGeoJSON(point: RoutePoint): GeoJSON.Feature<GeoJSON.Point> {
+  return {
+    type: 'Feature',
+    properties: {},
+    geometry: {
+      type: 'Point',
+      coordinates: [point.lng, point.lat],
+    },
+  };
+}
 
-  for (const p of points) {
-    if (p.lat < minLat) minLat = p.lat;
-    if (p.lat > maxLat) maxLat = p.lat;
-    if (p.lng < minLng) minLng = p.lng;
-    if (p.lng > maxLng) maxLng = p.lng;
-  }
+function setupRouteLayers(map: maplibregl.Map) {
+  if (map.getSource(ROUTE_SOURCE)) return;
 
-  const padding = 0.05;
-  const dLat = maxLat - minLat || 1e-6;
-  const dLng = maxLng - minLng || 1e-6;
+  map.addSource(ROUTE_SOURCE, { type: 'geojson', data: EMPTY_LINE });
+  map.addSource(START_SOURCE, { type: 'geojson', data: EMPTY_POINTS });
+  map.addSource(END_SOURCE, { type: 'geojson', data: EMPTY_POINTS });
 
-  const normPoints = points.map((p) => {
-    const x = ((p.lng - minLng) / dLng) * (100 - padding * 2 * 100) + padding * 100;
-    const y = (1 - (p.lat - minLat) / dLat) * (100 - padding * 2 * 100) + padding * 100;
-    return { x, y };
+  map.addLayer({
+    id: 'route-line',
+    type: 'line',
+    source: ROUTE_SOURCE,
+    layout: { 'line-join': 'round', 'line-cap': 'round' },
+    paint: ROUTE_LINE_PAINT,
   });
 
-  const polyPoints = normPoints.map(p => `${p.x},${p.y}`).join(' ');
-  const start = normPoints[0];
-  const end = normPoints[normPoints.length - 1];
+  map.addLayer({
+    id: 'start-marker',
+    type: 'circle',
+    source: START_SOURCE,
+    paint: {
+      'circle-radius': 6,
+      'circle-color': ROUTE_COLORS.start,
+      'circle-stroke-width': 2,
+      'circle-stroke-color': '#ffffff',
+    },
+  });
 
-  return (
-    <div className={['h-48 w-full rounded-2xl overflow-hidden bg-gray-900/5 dark:bg-gray-800', className].join(' ')}>
-      <svg viewBox="0 0 100 100" className="w-full h-full">
-        <defs>
-          <linearGradient id="runRouteStroke" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0%" stopColor="#22c55e" />
-            <stop offset="100%" stopColor="#0ea5e9" />
-          </linearGradient>
-        </defs>
+  map.addLayer({
+    id: 'end-marker',
+    type: 'circle',
+    source: END_SOURCE,
+    paint: {
+      'circle-radius': 6,
+      'circle-color': ROUTE_COLORS.end,
+      'circle-stroke-width': 2,
+      'circle-stroke-color': '#ffffff',
+    },
+  });
+}
 
-        <rect x="0" y="0" width="100" height="100" fill="url(#routeBg)" fillOpacity="0" />
+function updateRouteData(map: maplibregl.Map, points: RoutePoint[]) {
+  const routeSource = map.getSource(ROUTE_SOURCE) as maplibregl.GeoJSONSource | undefined;
+  const startSource = map.getSource(START_SOURCE) as maplibregl.GeoJSONSource | undefined;
+  const endSource = map.getSource(END_SOURCE) as maplibregl.GeoJSONSource | undefined;
+  if (!routeSource || !startSource || !endSource) return;
 
-        <polyline
-          points={polyPoints}
-          fill="none"
-          stroke="url(#runRouteStroke)"
-          strokeWidth={2.5}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-
-        {/* Start point */}
-        <circle cx={start.x} cy={start.y} r={2.5} fill="#22c55e" />
-        {/* End point */}
-        <circle cx={end.x} cy={end.y} r={2.5} fill="#0ea5e9" />
-      </svg>
-    </div>
+  routeSource.setData(points.length >= 2 ? toLineGeoJSON(points) : EMPTY_LINE);
+  startSource.setData(
+    points.length > 0
+      ? { type: 'FeatureCollection', features: [toPointGeoJSON(points[0])] }
+      : EMPTY_POINTS,
+  );
+  endSource.setData(
+    points.length > 1
+      ? { type: 'FeatureCollection', features: [toPointGeoJSON(points[points.length - 1])] }
+      : EMPTY_POINTS,
   );
 }
 
+function fitRoute(map: maplibregl.Map, points: RoutePoint[], followLatest: boolean) {
+  if (points.length === 0) return;
 
+  const last = points[points.length - 1];
+
+  if (followLatest) {
+    map.easeTo({ center: [last.lng, last.lat], zoom: 16, duration: 500 });
+    return;
+  }
+
+  if (points.length === 1) {
+    map.easeTo({ center: [last.lng, last.lat], zoom: 16, duration: 0 });
+    return;
+  }
+
+  const bounds = new maplibregl.LngLatBounds();
+  for (const p of points) {
+    bounds.extend([p.lng, p.lat]);
+  }
+  map.fitBounds(bounds, { padding: 40, duration: 0, maxZoom: 16 });
+}
+
+function isDarkMode(): boolean {
+  return document.documentElement.classList.contains('dark');
+}
+
+export function RunRouteMap({ points, className = '', followLatest = false }: RunRouteMapProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<maplibregl.Map | null>(null);
+  const pointsRef = useRef(points);
+  const followLatestRef = useRef(followLatest);
+  const isDarkRef = useRef(isDarkMode());
+
+  pointsRef.current = points;
+  followLatestRef.current = followLatest;
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+
+    const map = new maplibregl.Map({
+      container: containerRef.current,
+      style: getMapStyle(isDarkRef.current),
+      center: [-98, 39],
+      zoom: 4,
+      attributionControl: { compact: true },
+    });
+
+    mapRef.current = map;
+
+    const onStyleReady = () => {
+      setupRouteLayers(map);
+      updateRouteData(map, pointsRef.current);
+      fitRoute(map, pointsRef.current, followLatestRef.current);
+    };
+
+    map.on('load', onStyleReady);
+    map.on('style.load', onStyleReady);
+
+    const observer = new MutationObserver(() => {
+      const dark = isDarkMode();
+      if (dark === isDarkRef.current) return;
+      isDarkRef.current = dark;
+      map.setStyle(getMapStyle(dark));
+    });
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+
+    return () => {
+      observer.disconnect();
+      map.remove();
+      mapRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !map.isStyleLoaded()) return;
+
+    updateRouteData(map, points);
+    fitRoute(map, points, followLatest);
+  }, [points, followLatest]);
+
+  const showWaitingOverlay = followLatest && points.length === 0;
+  const showNoRouteOverlay = !followLatest && points.length === 0;
+
+  return (
+    <div className={['relative h-56 w-full rounded-2xl overflow-hidden bg-gray-100 dark:bg-gray-800', className].join(' ')}>
+      <div ref={containerRef} className="absolute inset-0" />
+      {showWaitingOverlay && (
+        <div className="absolute inset-0 flex items-center justify-center bg-gray-900/20 pointer-events-none">
+          <span className="text-xs text-gray-600 dark:text-gray-300 bg-white/80 dark:bg-gray-900/80 px-3 py-1.5 rounded-full">
+            Waiting for GPS…
+          </span>
+        </div>
+      )}
+      {showNoRouteOverlay && (
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+          <span className="text-xs text-gray-400">Route data not available.</span>
+        </div>
+      )}
+    </div>
+  );
+}
