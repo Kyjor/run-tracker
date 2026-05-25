@@ -11,6 +11,7 @@ import { Spinner } from '../components/ui/Spinner';
 import { Button } from '../components/ui/Button';
 import { PullToRefresh } from '../components/ui/PullToRefresh';
 import { getFeed, toggleLike, getFollowingWithProfiles, getFollowersWithProfiles } from '../services/socialService';
+import { getCachedFeed, setCachedFeed } from '../services/feedCache';
 import { useAuth } from '../contexts/AuthContext';
 
 type Tab = 'feed' | 'following' | 'followers';
@@ -32,15 +33,16 @@ export function SocialScreen() {
   const { user } = useAuth();
   const [tab, setTab] = useState<Tab>('feed');
 
-  const [feed, setFeed] = useState<FeedItem[]>([]);
+  const [feed, setFeed] = useState<FeedItem[]>(() => getCachedFeed() ?? []);
   const [following, setFollowing] = useState<Profile[]>([]);
   const [followers, setFollowers] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
 
   const loadFeed = useCallback(async () => {
-    setLoading(true);
+    if (feed.length === 0) setLoading(true);
     const data = await getFeed();
     setFeed(data);
+    setCachedFeed(data);
     setLoading(false);
   }, []);
 
@@ -66,12 +68,16 @@ export function SocialScreen() {
   }, [tab, user, loadFeed, loadFollowing, loadFollowers]);
 
   async function handleLike(item: FeedItem) {
+    setFeed(prev => {
+      const next = prev.map(f =>
+        f.id === item.id
+          ? { ...f, user_has_liked: !f.user_has_liked, likes_count: (f.likes_count ?? 0) + (f.user_has_liked ? -1 : 1) }
+          : f,
+      );
+      setCachedFeed(next);
+      return next;
+    });
     await toggleLike(item.id);
-    setFeed(prev => prev.map(f =>
-      f.id === item.id
-        ? { ...f, user_has_liked: !f.user_has_liked, likes_count: (f.likes_count ?? 0) + (f.user_has_liked ? -1 : 1) }
-        : f,
-    ));
   }
 
   const handleRefresh = useCallback(async () => {

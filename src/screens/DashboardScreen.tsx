@@ -21,6 +21,7 @@ import { getRuns } from '../services/runService';
 import { getActiveGoals, getGoalProgress } from '../services/goalService';
 import { getRunStats } from '../services/statsService';
 import { getFeed, toggleLike } from '../services/socialService';
+import { getCachedFeed, isFeedStale, setCachedFeed } from '../services/feedCache';
 import { format, startOfWeek, endOfWeek } from 'date-fns';
 import { formatDistance } from '../utils/paceUtils';
 
@@ -38,8 +39,8 @@ export function DashboardScreen() {
   const [weekStats, setWeekStats] = useState<RunStats | null>(null);
   const [dataLoading, setDataLoading] = useState(true);
 
-  // Friends feed
-  const [feed, setFeed] = useState<FeedItem[]>([]);
+  // Friends feed — initialise from cache for instant display
+  const [feed, setFeed] = useState<FeedItem[]>(() => getCachedFeed() ?? []);
   const [feedOffset, setFeedOffset] = useState(0);
   const [feedLoading, setFeedLoading] = useState(false);
   const [hasMore, setHasMore] = useState(true);
@@ -68,36 +69,48 @@ export function DashboardScreen() {
 
   const refreshFeed = useCallback(async () => {
     if (!user) return;
-    setFeedLoading(true);
+    // Only show spinner if no cached data to display
+    if (feed.length === 0) setFeedLoading(true);
     const items = await getFeed(FEED_PAGE_SIZE, 0);
     setFeed(items);
+    setCachedFeed(items);
     setHasMore(items.length === FEED_PAGE_SIZE);
     setFeedOffset(items.length);
     setFeedLoading(false);
   }, [user]);
 
-  // Load initial feed page when user is available
+  // Show cached feed instantly, revalidate in background if stale
   useEffect(() => {
-    refreshFeed();
-  }, [refreshFeed]);
+    if (!user) return;
+    if (isFeedStale()) refreshFeed();
+  }, [user]);
 
   const loadMoreFeed = useCallback(async () => {
     if (feedLoading || !hasMore) return;
     setFeedLoading(true);
     const items = await getFeed(FEED_PAGE_SIZE, feedOffset);
-    setFeed(prev => [...prev, ...items]);
+    setFeed(prev => {
+      const next = [...prev, ...items];
+      setCachedFeed(next);
+      return next;
+    });
     setHasMore(items.length === FEED_PAGE_SIZE);
     setFeedOffset(prev => prev + items.length);
     setFeedLoading(false);
   }, [feedLoading, hasMore, feedOffset]);
 
   async function handleFeedLike(item: FeedItem) {
+    // Optimistic update
+    setFeed(prev => {
+      const next = prev.map(f =>
+        f.id === item.id
+          ? { ...f, user_has_liked: !f.user_has_liked, likes_count: (f.likes_count ?? 0) + (f.user_has_liked ? -1 : 1) }
+          : f,
+      );
+      setCachedFeed(next);
+      return next;
+    });
     await toggleLike(item.id);
-    setFeed(prev => prev.map(f =>
-      f.id === item.id
-        ? { ...f, user_has_liked: !f.user_has_liked, likes_count: (f.likes_count ?? 0) + (f.user_has_liked ? -1 : 1) }
-        : f,
-    ));
   }
 
   // Refresh all dashboard data

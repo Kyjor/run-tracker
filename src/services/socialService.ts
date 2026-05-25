@@ -281,7 +281,6 @@ export async function getFeed(limit = 30, offset = 0): Promise<FeedItem[]> {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) return [];
 
-  // Get IDs of people we follow
   const { data: follows } = await supabase
     .from('follows')
     .select('following_id')
@@ -292,7 +291,6 @@ export async function getFeed(limit = 30, offset = 0): Promise<FeedItem[]> {
     .filter(id => id !== session.user.id);
   if (followingIds.length === 0) return [];
 
-  // Show recent runs from followed users (this is the primary feed content)
   const { data: runs } = await supabase
     .from('user_runs')
     .select('*')
@@ -304,16 +302,13 @@ export async function getFeed(limit = 30, offset = 0): Promise<FeedItem[]> {
   if (!runs || runs.length === 0) return [];
 
   const runIds = runs.map(r => r.id);
-
-  // Fetch profiles and routes in batch
   const userIds = [...new Set(runs.map(r => r.user_id))];
-  const [profilesRes, routesRes] = await Promise.all([
+
+  // Batch: profiles, routes, and all existing feed_activities for these runs
+  const [profilesRes, routesRes, activitiesRes] = await Promise.all([
     supabase.from('profiles').select('*').in('id', userIds),
-    supabase
-      .from('user_run_routes')
-      .select('run_id, points_json')
-      .in('run_id', runIds)
-      .in('user_id', followingIds),
+    supabase.from('user_run_routes').select('run_id, points_json').in('run_id', runIds).in('user_id', followingIds),
+    supabase.from('feed_activities').select('id, user_id, data').eq('activity_type', 'run_completed').in('user_id', userIds),
   ]);
 
   const profileMap = new Map((profilesRes.data ?? []).map(p => [p.id, p]));
@@ -321,78 +316,65 @@ export async function getFeed(limit = 30, offset = 0): Promise<FeedItem[]> {
   for (const row of routesRes.data ?? []) {
     try {
       const pts = JSON.parse(row.points_json as string) as RoutePoint[];
-      if (Array.isArray(pts) && pts.length >= 2) {
-        routeMap.set(row.run_id as string, pts);
-      }
-    } catch {
-      // skip invalid route json
-    }
+      if (Array.isArray(pts) && pts.length >= 2) routeMap.set(row.run_id as string, pts);
+    } catch { /* skip */ }
   }
 
-  // For each run, find or create a feed_activity
-  const feedItems: FeedItem[] = [];
-  for (const run of runs) {
-    const runData = {
-      distance: run.distance_value,
-      unit: run.distance_unit,
-      duration: run.duration_seconds,
-      run_type: run.run_type,
-      run_id: run.id, // Store run ID in data for reference
-      run_date: run.date, // Store actual run date for display
-    };
+  // Map run_id -> activity_id from existing feed_activities
+  const activityByRunId = new Map<string, string>();
+  for (const a of activitiesRes.data ?? []) {
+    const rid = (a.data as { run_id?: string })?.run_id;
+    if (rid) activityByRunId.set(rid, a.id);
+  }
 
-    // Check if feed_activity exists for this run (stable match by run_id in JSON payload)
-    const { data: existingActivities } = await supabase
-      .from('feed_activities')
-      .select('id')
-      .eq('user_id', run.user_id)
-      .eq('activity_type', 'run_completed')
-      .contains('data', { run_id: run.id });
-
-    let activityId: string;
-    if (existingActivities && existingActivities.length > 0) {
-      activityId = existingActivities[0].id;
-    } else {
-      // Create feed_activity for this run
-      const { data: newActivity, error } = await supabase
-        .from('feed_activities')
-        .insert({
-          user_id: run.user_id,
-          activity_type: 'run_completed',
-          data: runData,
-          created_at: run.created_at,
-        })
-        .select('id')
-        .single();
-      if (error || !newActivity) {
-        console.error('Failed to create feed activity:', error);
-        continue;
-      }
-      activityId = newActivity.id;
-    }
-
-    // Fetch likes and comments for this activity
-    const [likesRes, commentsRes, userLikeRes] = await Promise.all([
-      supabase.from('feed_likes').select('id').eq('activity_id', activityId),
-      supabase.from('feed_comments').select('id').eq('activity_id', activityId),
-      supabase.from('feed_likes').select('id').eq('activity_id', activityId).eq('user_id', session.user.id).maybeSingle(),
-    ]);
-
-    feedItems.push({
-      id: activityId,
+  // Bulk-create missing feed_activities
+  const missingRuns = runs.filter(r => !activityByRunId.has(r.id));
+  if (missingRuns.length > 0) {
+    const rows = missingRuns.map(run => ({
       user_id: run.user_id,
       activity_type: 'run_completed',
-      data: runData,
+      data: { distance: run.distance_value, unit: run.distance_unit, duration: run.duration_seconds, run_type: run.run_type, run_id: run.id, run_date: run.date },
       created_at: run.created_at,
-      profile: profileMap.get(run.user_id) ?? undefined,
-      likes_count: likesRes.data?.length ?? 0,
-      comments_count: commentsRes.data?.length ?? 0,
-      user_has_liked: !!userLikeRes.data,
-      route_points: routeMap.get(run.id),
-    });
+    }));
+    const { data: inserted } = await supabase.from('feed_activities').insert(rows).select('id, data');
+    for (const a of inserted ?? []) {
+      const rid = (a.data as { run_id?: string })?.run_id;
+      if (rid) activityByRunId.set(rid, a.id);
+    }
   }
 
-  return feedItems;
+  // Collect all activity IDs and batch-fetch engagement
+  const allActivityIds = runs.map(r => activityByRunId.get(r.id)).filter(Boolean) as string[];
+  const [likesRes, commentsRes, userLikesRes] = await Promise.all([
+    supabase.from('feed_likes').select('activity_id').in('activity_id', allActivityIds),
+    supabase.from('feed_comments').select('activity_id').in('activity_id', allActivityIds),
+    supabase.from('feed_likes').select('activity_id').in('activity_id', allActivityIds).eq('user_id', session.user.id),
+  ]);
+
+  const likeCount = new Map<string, number>();
+  const commentCount = new Map<string, number>();
+  const userLiked = new Set<string>();
+  for (const l of likesRes.data ?? []) likeCount.set(l.activity_id, (likeCount.get(l.activity_id) ?? 0) + 1);
+  for (const c of commentsRes.data ?? []) commentCount.set(c.activity_id, (commentCount.get(c.activity_id) ?? 0) + 1);
+  for (const l of userLikesRes.data ?? []) userLiked.add(l.activity_id);
+
+  return runs
+    .filter(r => activityByRunId.has(r.id))
+    .map(run => {
+      const actId = activityByRunId.get(run.id)!;
+      return {
+        id: actId,
+        user_id: run.user_id,
+        activity_type: 'run_completed' as const,
+        data: { distance: run.distance_value, unit: run.distance_unit, duration: run.duration_seconds, run_type: run.run_type, run_id: run.id, run_date: run.date },
+        created_at: run.created_at,
+        profile: profileMap.get(run.user_id) ?? undefined,
+        likes_count: likeCount.get(actId) ?? 0,
+        comments_count: commentCount.get(actId) ?? 0,
+        user_has_liked: userLiked.has(actId),
+        route_points: routeMap.get(run.id),
+      };
+    });
 }
 
 export async function publishFeedActivity(
