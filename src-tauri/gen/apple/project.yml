@@ -2,7 +2,7 @@ name: run-with-friends
 options:
   bundleIdPrefix: com.runwithfriends.app
   deploymentTarget:
-    iOS: 13.0
+    iOS: 14.0
 fileGroups: [../../src]
 configs:
   debug: debug
@@ -52,7 +52,7 @@ targets:
           - UIInterfaceOrientationPortraitUpsideDown
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
-        CFBundleShortVersionString: 0.5.1
+        CFBundleShortVersionString: 0.5.2
         CFBundleVersion: 2
     entitlements:
       path: run-with-friends_iOS/run-with-friends_iOS.entitlements

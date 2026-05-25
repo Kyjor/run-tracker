@@ -81,7 +81,7 @@ final class LocationTrackingManager: NSObject, CLLocationManagerDelegate {
     }
 
     func permissionStatus() -> String {
-        switch manager.authorizationStatus {
+        switch CLLocationManager.authorizationStatus() {
         case .authorizedAlways:
             return "always"
         case .authorizedWhenInUse:
@@ -96,20 +96,16 @@ final class LocationTrackingManager: NSObject, CLLocationManagerDelegate {
     }
 
     func requestPermission() -> String {
-        let status = manager.authorizationStatus
+        let status = CLLocationManager.authorizationStatus()
         if status == .notDetermined {
             let semaphore = DispatchSemaphore(value: 0)
-            var resolved = status
             DispatchQueue.main.async {
                 self.manager.requestAlwaysAuthorization()
             }
-            // Wait briefly for delegate callback
             DispatchQueue.global().asyncAfter(deadline: .now() + 0.5) {
-                resolved = self.manager.authorizationStatus
                 semaphore.signal()
             }
             _ = semaphore.wait(timeout: .now() + 10)
-            _ = resolved
         }
         return permissionStatus()
     }
@@ -226,7 +222,7 @@ final class LocationTrackingManager: NSObject, CLLocationManagerDelegate {
     // MARK: - Private helpers
 
     private func configureBackgroundUpdates() {
-        if manager.authorizationStatus == .authorizedAlways {
+        if CLLocationManager.authorizationStatus() == .authorizedAlways {
             manager.allowsBackgroundLocationUpdates = true
         } else {
             manager.allowsBackgroundLocationUpdates = false
@@ -312,7 +308,7 @@ private func encodeLiveRunSnapshot(_ snapshot: LiveRunSnapshotJSON) -> String {
 // ---------------------------------------------------------------------------
 
 @_cdecl("register_live_run_callback")
-public func registerLiveRunCallback(_ callback: LiveRunUpdateCallback?) {
+func registerLiveRunCallback(_ callback: LiveRunUpdateCallback?) {
     LocationTrackingManager.shared.setCallback(callback)
 }
 

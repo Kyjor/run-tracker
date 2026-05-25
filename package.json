@@ -1,13 +1,16 @@
 {
   "name": "run-with-friends",
   "private": true,
-  "version": "0.5.1",
+  "version": "0.5.2",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "ios:release": "bash scripts/ios-release.sh",
+    "ios:build:store": "bash scripts/ios-release.sh --build-only",
+    "ios:upload:store": "bash scripts/ios-release.sh --upload-only"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.52.0",
