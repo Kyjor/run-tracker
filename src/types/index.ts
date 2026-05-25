@@ -289,6 +289,8 @@ export interface FeedItem {
   likes_count?: number;
   comments_count?: number;
   user_has_liked?: boolean;
+  /** GPS route for run_completed feed cards */
+  route_points?: RoutePoint[];
 }
 
 export interface FeedComment {

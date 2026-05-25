@@ -41,6 +41,8 @@ import { RunDetailScreen } from './screens/RunDetailScreen';
 import { LogEntryScreen } from './screens/LogEntryScreen';
 import { LiveRunScreen } from './screens/LiveRunScreen';
 import { FitImportScreen } from './screens/FitImportScreen';
+import { NutritionScreen } from './screens/NutritionScreen';
+import { AchievementsScreen } from './components/achievements/AchievementsScreen';
 import { ActiveRunBanner } from './components/run/ActiveRunBanner';
 import type { PendingFitFilePayload } from './services/fitImportService';
 
@@ -136,20 +138,15 @@ function AppShell() {
         );
   }
 
-  const isTabRoute =
-    location.pathname.startsWith('/home') ||
-    location.pathname.startsWith('/calendar') ||
-    location.pathname.startsWith('/log') ||
-    location.pathname.startsWith('/stats') ||
-    location.pathname.startsWith('/profile') ||
-    location.pathname.startsWith('/social') ||
-    location.pathname.startsWith('/community');
-
-  // Hide the bottom nav on the live run screen so you can't tab away mid-run
-  const showTabBar = isTabRoute && !location.pathname.startsWith('/log/live');
+  const showTabBar =
+    location.pathname === '/home' ||
+    location.pathname === '/calendar' ||
+    location.pathname === '/log' ||
+    location.pathname === '/stats' ||
+    location.pathname === '/profile';
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden bg-gray-50 dark:bg-gray-900">
+    <div className="flex flex-col h-screen overflow-hidden bg-surface-elevated dark:bg-surface-dark">
       <div className="flex-1 overflow-hidden flex flex-col">
         <Routes>
           {/* Root redirect */}
@@ -176,6 +173,8 @@ function AppShell() {
           <Route path="/profile/plans/new" element={<PlanEditorScreen />} />
           <Route path="/profile/plans/:id" element={<PlanDetailScreen />} />
           <Route path="/profile/goals" element={<GoalsScreen />} />
+          <Route path="/profile/nutrition" element={<NutritionScreen />} />
+          <Route path="/profile/achievements" element={<AchievementsScreen />} />
           <Route path="/settings" element={<SettingsScreen />} />
 
           {/* Social */}

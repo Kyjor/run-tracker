@@ -3,8 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import type { GoalProgress, RunStats, FeedItem, Run } from '../types';
 import { Header } from '../components/navigation/Header';
 import { TodayActivityCard } from '../components/run/TodayActivityCard';
-import { RunCard } from '../components/run/RunCard';
-import { ActivityFeedItem } from '../components/social/ActivityFeedItem';
+import { LastRunCard } from '../components/run/LastRunCard';
+import { ActivityFeedCard } from '../components/social/ActivityFeedCard';
+import { StaggerList, StaggerItem } from '../components/motion/StaggerList';
 import { Card, SectionHeader } from '../components/ui/Card';
 import { ProgressRing } from '../components/ui/ProgressRing';
 import { EmptyState } from '../components/ui/EmptyState';
@@ -14,15 +15,13 @@ import { PullToRefresh } from '../components/ui/PullToRefresh';
 import { usePlan } from '../contexts/PlanContext';
 import { useDb } from '../contexts/DatabaseContext';
 import { useSettings } from '../contexts/SettingsContext';
-import { useToast } from '../contexts/ToastContext';
+
 import { useAuth } from '../contexts/AuthContext';
 import { getRuns } from '../services/runService';
 import { getActiveGoals, getGoalProgress } from '../services/goalService';
 import { getRunStats } from '../services/statsService';
 import { getFeed, toggleLike } from '../services/socialService';
-import type { HealthKitWorkout } from '../services/healthkitService';
-import { requestHealthKitPermission, fetchHealthKitWorkouts, workoutExists, importHealthKitWorkout } from '../services/healthkitService';
-import { format, startOfWeek, endOfWeek, parseISO } from 'date-fns';
+import { format, startOfWeek, endOfWeek } from 'date-fns';
 import { formatDistance } from '../utils/paceUtils';
 
 const FEED_PAGE_SIZE = 5;
@@ -33,54 +32,17 @@ export function DashboardScreen() {
   const { settings } = useSettings();
   const { user } = useAuth();
   const { todayActivity, weekNumber, dayOfWeek, isLoading } = usePlan();
-  const { showToast } = useToast();
 
-  const [recentRuns, setRecentRuns] = useState<Run[]>([]);
+  const [lastRun, setLastRun] = useState<Run | null>(null);
   const [goalProgress, setGoalProgress] = useState<GoalProgress[]>([]);
   const [weekStats, setWeekStats] = useState<RunStats | null>(null);
   const [dataLoading, setDataLoading] = useState(true);
-  const [todayWorkouts, setTodayWorkouts] = useState<Array<HealthKitWorkout & { alreadyImported: boolean }>>([]);
-  const [importingWorkoutId, setImportingWorkoutId] = useState<string | null>(null);
 
   // Friends feed
   const [feed, setFeed] = useState<FeedItem[]>([]);
   const [feedOffset, setFeedOffset] = useState(0);
   const [feedLoading, setFeedLoading] = useState(false);
   const [hasMore, setHasMore] = useState(true);
-
-  async function refreshTodayHealthKitWorkouts() {
-    if (!db) return;
-    try {
-      const hasHKPermission = await requestHealthKitPermission();
-      if (!hasHKPermission) {
-        setTodayWorkouts([]);
-        return;
-      }
-      const dayStart = new Date();
-      dayStart.setHours(0, 0, 0, 0);
-      const now = new Date();
-      const raw = await fetchHealthKitWorkouts(dayStart.toISOString(), now.toISOString());
-      // Extra safety: filter on the client as well so mock/non‑iOS paths and
-      // any older native builds still only show *today's* workouts here.
-      const todayStartMs = dayStart.getTime();
-      const todayEndMs = now.getTime();
-      const onlyToday = raw.filter(w => {
-        const t = new Date(w.start_date).getTime();
-        return t >= todayStartMs && t <= todayEndMs;
-      });
-
-      const withStatus = await Promise.all(
-        onlyToday.map(async w => ({
-          ...w,
-          alreadyImported: await workoutExists(db, w, settings.units),
-        })),
-      );
-      setTodayWorkouts(withStatus);
-    } catch (err) {
-      console.error('Failed to load today HealthKit workouts:', err);
-      setTodayWorkouts([]);
-    }
-  }
 
   useEffect(() => {
     if (!db) return;
@@ -90,16 +52,15 @@ export function DashboardScreen() {
       const weekEnd = format(endOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd');
 
       const [runs, goals, stats] = await Promise.all([
-        getRuns(db, 5),
+        getRuns(db, 1),
         getActiveGoals(db, today),
         getRunStats(db, settings.units, weekStart, weekEnd),
       ]);
-      setRecentRuns(runs);
+      setLastRun(runs[0] ?? null);
       setWeekStats(stats);
 
       const progressArr = await Promise.all(goals.map(g => getGoalProgress(db, g)));
       setGoalProgress(progressArr);
-      await refreshTodayHealthKitWorkouts();
       setDataLoading(false);
     }
     load();
@@ -148,16 +109,15 @@ export function DashboardScreen() {
     const weekEnd = format(endOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd');
 
     const [runs, goals, stats] = await Promise.all([
-      getRuns(db, 5),
+      getRuns(db, 1),
       getActiveGoals(db, today),
       getRunStats(db, settings.units, weekStart, weekEnd),
     ]);
-    setRecentRuns(runs);
+    setLastRun(runs[0] ?? null);
     setWeekStats(stats);
 
     const progressArr = await Promise.all(goals.map(g => getGoalProgress(db, g)));
     setGoalProgress(progressArr);
-    await refreshTodayHealthKitWorkouts();
     setDataLoading(false);
 
     // Also refresh feed if user is logged in
@@ -165,30 +125,6 @@ export function DashboardScreen() {
       await refreshFeed();
     }
   }, [db, settings.units, user, refreshFeed]);
-
-  const unimportedTodayWorkouts = todayWorkouts.filter(w => !w.alreadyImported);
-
-  async function handleImportTodayWorkout(workout: HealthKitWorkout & { alreadyImported: boolean }) {
-    if (!db || workout.alreadyImported) return;
-    setImportingWorkoutId(workout.id);
-    try {
-      const result = await importHealthKitWorkout(db, workout, settings.units, settings.max_heart_rate_bpm);
-      if (result.success) {
-        showToast('Workout imported!', 'success');
-        setTodayWorkouts(prev =>
-          prev.map(w => (w.id === workout.id ? { ...w, alreadyImported: true } : w)),
-        );
-        await handleRefresh();
-      } else if (result.error) {
-        showToast(result.error, 'error');
-      }
-    } catch (err) {
-      console.error('Failed to import workout from dashboard:', err);
-      showToast('Failed to import workout', 'error');
-    } finally {
-      setImportingWorkoutId(null);
-    }
-  }
 
   // Compute week run progress
   const weekProgress = { completed: 0, total: 0 };
@@ -210,62 +146,29 @@ export function DashboardScreen() {
       />
 
       <PullToRefresh onRefresh={handleRefresh}>
-        <div className="px-4 pt-4 pb-24 flex flex-col gap-4">
-        {unimportedTodayWorkouts.length > 0 && (
-          <Card className="border border-primary-200 dark:border-primary-800 bg-primary-50 dark:bg-primary-900/20">
-            <div className="flex flex-col gap-3">
-              <div className="flex items-start gap-3">
-                <div className="text-xl">💡</div>
-                <div className="flex-1">
-                  <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-                    I noticed you worked out today
-                  </p>
-                  <p className="text-xs text-gray-600 dark:text-gray-300 mt-1">
-                    Import today&apos;s HealthKit workouts directly from here.
-                  </p>
-                </div>
-              </div>
-              <div className="flex flex-col gap-2">
-                {unimportedTodayWorkouts.map(w => {
-                  const distanceKm = (w.distance_meters ?? 0) / 1000;
-                  const distanceMi = distanceKm * 0.621371;
-                  const distVal = settings.units === 'mi' ? distanceMi : distanceKm;
-                  const distLabel = distVal > 0 ? `${distVal.toFixed(2)} ${settings.units}` : 'No distance';
-                  const d = parseISO(w.start_date);
-                  const timeLabel = format(d, 'p');
-                  const durationMinutes = Math.floor(w.duration_seconds / 60);
-                  const durationSeconds = Math.floor(w.duration_seconds % 60);
-                  const durationStr = `${durationMinutes}:${durationSeconds.toString().padStart(2, '0')}`;
-                  return (
-                    <div
-                      key={w.id}
-                      className="flex items-center justify-between gap-3 px-3 py-2 rounded-xl bg-white/80 dark:bg-gray-900/60"
-                    >
-                      <div className="flex flex-col text-xs text-gray-700 dark:text-gray-200">
-                        <span className="font-medium">{timeLabel}</span>
-                        <span className="text-gray-500 dark:text-gray-400">
-                          {distLabel} · {durationStr}
-                        </span>
-                      </div>
-                      <Button
-                        size="sm"
-                        onClick={() => handleImportTodayWorkout(w)}
-                        disabled={importingWorkoutId === w.id}
-                        isLoading={importingWorkoutId === w.id}
-                      >
-                        Import
-                      </Button>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </Card>
-        )}
+        <div className="px-4 pt-4 pb-24 flex flex-col gap-section">
 
-        {/* Today's Activity */}
+        {/* Today + This Week combined */}
         <div>
-          <SectionHeader title="Today" />
+          <SectionHeader title="Today" action={
+            weekStats && weekStats.total_runs > 0 ? (
+              <button type="button" className="text-xs font-medium text-primary-600 dark:text-primary-400" onClick={() => navigate('/stats')}>
+                See all
+              </button>
+            ) : undefined
+          } />
+
+          {weekStats && weekStats.total_runs > 0 && (
+            <div className="flex items-center gap-3 mb-3 px-1">
+              <WeekStat label="Runs" value={String(weekStats.total_runs)} />
+              <span className="text-gray-300 dark:text-gray-600">·</span>
+              <WeekStat label={settings.units} value={weekStats.total_distance.toFixed(1)} />
+              <span className="text-gray-300 dark:text-gray-600">·</span>
+              <WeekStat label="streak" value={`${weekStats.current_streak}d`} />
+              <span className="ml-auto text-[10px] text-ink-muted dark:text-ink-dark-muted uppercase tracking-wide">this week</span>
+            </div>
+          )}
+
           {todayActivity ? (
             <TodayActivityCard
               activity={todayActivity}
@@ -283,37 +186,41 @@ export function DashboardScreen() {
           )}
         </div>
 
-        {/* Week stats */}
-        {weekStats && weekStats.total_runs > 0 && (
-          <div>
-            <SectionHeader title="This Week" action={
-              <button className="text-xs text-primary-600 dark:text-primary-400" onClick={() => navigate('/stats')}>
-                See All →
-              </button>
-            } />
-            <Card>
-              <div className="flex justify-around">
-                <StatPill label="Runs" value={String(weekStats.total_runs)} />
-                <StatPill label={settings.units} value={weekStats.total_distance.toFixed(1)} />
-                <StatPill label="Streak" value={`${weekStats.current_streak}d 🔥`} />
-              </div>
-            </Card>
-          </div>
-        )}
+        {/* Last run */}
+        <div>
+          <SectionHeader title="Your last run" action={
+            <button type="button" className="text-xs font-medium text-primary-600 dark:text-primary-400" onClick={() => navigate('/stats')}>
+              All runs
+            </button>
+          } />
+          {lastRun ? (
+            <LastRunCard
+              run={lastRun}
+              units={settings.units}
+              onClick={() => navigate(`/runs/${lastRun.id}`)}
+            />
+          ) : (
+            <EmptyState
+              title="No runs yet"
+              description="Log your first run to start tracking your progress."
+              action={<Button size="sm" onClick={() => navigate('/log/manual')}>Log a Run</Button>}
+            />
+          )}
+        </div>
 
         {/* Goal progress */}
         {goalProgress.length > 0 && (
           <div>
             <SectionHeader title="Goals" action={
-              <button className="text-xs text-primary-600 dark:text-primary-400" onClick={() => navigate('/profile/goals')}>
-                Manage →
+              <button type="button" className="text-xs font-medium text-primary-600 dark:text-primary-400" onClick={() => navigate('/profile/goals')}>
+                Manage
               </button>
             } />
             <div className="flex flex-col gap-2">
               {goalProgress.map(gp => (
                 <Card key={gp.goal.id} padding={false}>
                   <div className="flex items-center gap-4 p-4">
-                    <ProgressRing value={gp.percentage} size={56} strokeWidth={5} color="#3b82f6">
+                    <ProgressRing value={gp.percentage} size={56} strokeWidth={5} color="#6366f1">
                       <span className="text-[10px] font-bold text-gray-700 dark:text-gray-200">
                         {Math.round(gp.percentage)}%
                       </span>
@@ -338,63 +245,44 @@ export function DashboardScreen() {
           </div>
         )}
 
-        {/* Recent Runs */}
-        <div>
-          <SectionHeader title="Recent Runs" action={
-            <button className="text-xs text-primary-600 dark:text-primary-400" onClick={() => navigate('/stats')}>
-              All runs →
-            </button>
-          } />
-          {recentRuns.length === 0 ? (
-            <EmptyState
-              emoji="👟"
-              title="No runs yet"
-              description="Log your first run to start tracking your progress."
-              action={<Button size="sm" onClick={() => navigate('/log/manual')}>Log a Run</Button>}
-            />
-          ) : (
-            <div className="flex flex-col gap-2">
-              {recentRuns.map(r => (
-                <RunCard key={r.id} run={r} onClick={() => navigate(`/runs/${r.id}`)} />
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Friends Feed */}
+        {/* Friends feed */}
         {user && (
           <div>
             <SectionHeader title="Friends" action={
-              <button className="text-xs text-primary-600 dark:text-primary-400" onClick={() => navigate('/social')}>
-                See all →
+              <button type="button" className="text-xs font-medium text-primary-600 dark:text-primary-400" onClick={() => navigate('/social')}>
+                See all
               </button>
             } />
             {feedLoading && feed.length === 0 ? (
-              <div className="flex justify-center py-8">
-                <Spinner size="lg" className="text-primary-500" />
+              <div className="flex flex-col gap-3">
+                {[1, 2].map(i => (
+                  <div key={i} className="rounded-card bg-surface dark:bg-surface-dark-elevated border border-border dark:border-border-dark overflow-hidden animate-pulse">
+                    <div className="h-12 m-4 bg-gray-100 dark:bg-gray-700 rounded-xl" />
+                    <div className="aspect-[16/9] bg-gray-100 dark:bg-gray-800" />
+                  </div>
+                ))}
               </div>
             ) : feed.length === 0 ? (
-              <Card className="text-center py-4">
-                <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">
-                  Follow friends to see their activity here.
+              <Card className="text-center py-6">
+                <p className="text-sm text-ink-secondary dark:text-ink-dark-secondary mb-3">
+                  Follow friends to see their runs here.
                 </p>
                 <Button size="sm" onClick={() => navigate('/social/search')}>Find Friends</Button>
               </Card>
             ) : (
-              <div className="flex flex-col gap-2">
+              <StaggerList className="flex flex-col gap-3">
                 {feed.map(item => (
-                  <ActivityFeedItem
-                    key={item.id}
-                    item={item}
-                    onLike={() => handleFeedLike(item)}
-                    onCommentAdded={() => {
-                      // Refresh feed to update comment counts
-                      refreshFeed();
-                    }}
-                  />
+                  <StaggerItem key={item.id}>
+                    <ActivityFeedCard
+                      item={item}
+                      onLike={() => handleFeedLike(item)}
+                      onCommentAdded={() => refreshFeed()}
+                    />
+                  </StaggerItem>
                 ))}
                 {hasMore && (
                   <button
+                    type="button"
                     onClick={loadMoreFeed}
                     disabled={feedLoading}
                     className="w-full py-3 text-sm text-primary-600 dark:text-primary-400 font-medium flex items-center justify-center gap-2"
@@ -402,22 +290,24 @@ export function DashboardScreen() {
                     {feedLoading ? <Spinner size="sm" /> : 'Load more'}
                   </button>
                 )}
-              </div>
+              </StaggerList>
             )}
           </div>
         )}
+
         </div>
       </PullToRefresh>
     </div>
   );
 }
 
-function StatPill({ label, value }: { label: string; value: string }) {
+function WeekStat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex flex-col items-center">
-      <span className="text-lg font-bold text-gray-900 dark:text-white">{value}</span>
-      <span className="text-xs text-gray-400 uppercase tracking-wide">{label}</span>
-    </div>
+    <span className="text-sm text-ink-primary dark:text-ink-dark-primary">
+      <span className="font-semibold">{value}</span>
+      {' '}
+      <span className="text-ink-muted dark:text-ink-dark-muted text-xs">{label}</span>
+    </span>
   );
 }
 

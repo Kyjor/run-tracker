@@ -3,6 +3,8 @@ import { format, subDays, startOfMonth, endOfMonth } from 'date-fns';
 import type { RunStats } from '../types';
 import { Header } from '../components/navigation/Header';
 import { Card, SectionHeader } from '../components/ui/Card';
+import { SegmentedControl } from '../components/ui/SegmentedControl';
+import { FadeIn } from '../components/motion/FadeIn';
 import { MileageChart } from '../components/charts/MileageChart';
 import { RunTypeChart } from '../components/charts/RunTypeChart';
 import { Spinner } from '../components/ui/Spinner';
@@ -46,23 +48,17 @@ export function StatsScreen() {
       <Header title="Stats" />
 
       {/* Range Picker */}
-      <div className="sticky top-0 z-20 bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
-        <div className="flex px-4 gap-2 pt-3 pb-2 overflow-x-auto">
-        {(['week', 'month', 'year', 'all'] as Range[]).map(r => (
-          <button
-            key={r}
-            onClick={() => setRange(r)}
-            className={[
-              'px-3 py-1.5 rounded-xl text-sm font-medium whitespace-nowrap transition-colors',
-              range === r
-                ? 'bg-primary-600 text-white'
-                : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400',
-            ].join(' ')}
-          >
-            {r === 'week' ? 'This Week' : r === 'month' ? 'This Month' : r === 'year' ? 'This Year' : 'All Time'}
-          </button>
-        ))}
-        </div>
+      <div className="sticky top-0 z-20 bg-surface-elevated dark:bg-surface-dark border-b border-border dark:border-border-dark px-4 pt-3 pb-2">
+        <SegmentedControl
+          options={[
+            { value: 'week' as Range, label: 'Week' },
+            { value: 'month' as Range, label: 'Month' },
+            { value: 'year' as Range, label: 'Year' },
+            { value: 'all' as Range, label: 'All' },
+          ]}
+          value={range}
+          onChange={setRange}
+        />
       </div>
 
       {loading ? (
@@ -70,15 +66,14 @@ export function StatsScreen() {
           <Spinner size="lg" className="text-primary-500" />
         </div>
       ) : stats ? (
-        <div className="px-4 pt-4 flex flex-col gap-4">
-          {/* Summary numbers */}
+        <FadeIn className="px-4 pt-4 flex flex-col gap-4">
           <Card>
             <div className="grid grid-cols-2 gap-4">
               <StatCell label="Total Distance" value={formatDistance(stats.total_distance, settings.units)} />
               <StatCell label="Total Runs" value={String(stats.total_runs)} />
               <StatCell label="Avg Pace" value={stats.avg_pace_seconds_per_unit > 0 ? formatPace(stats.avg_pace_seconds_per_unit, settings.units) : '—'} />
               <StatCell label="Longest Run" value={formatDistance(stats.longest_run_distance, settings.units)} />
-              <StatCell label="Current Streak" value={`${stats.current_streak} days 🔥`} />
+              <StatCell label="Current Streak" value={`${stats.current_streak} days`} />
               <StatCell label="Longest Streak" value={`${stats.longest_streak} days`} />
             </div>
           </Card>
@@ -98,7 +93,7 @@ export function StatsScreen() {
               <RunTypeChart data={typeBreakdown} unit={settings.units} />
             </Card>
           )}
-        </div>
+        </FadeIn>
       ) : (
         <div className="flex items-center justify-center flex-1 py-20 text-gray-400">
           No data yet. Log some runs!

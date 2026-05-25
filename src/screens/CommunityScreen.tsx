@@ -4,6 +4,7 @@ import type { CommunityPlan } from '../types';
 import { Header } from '../components/navigation/Header';
 import { CommunityPlanCard } from '../components/plan/CommunityPlanCard';
 import { EmptyState } from '../components/ui/EmptyState';
+import { FadeIn } from '../components/motion/FadeIn';
 import { Spinner } from '../components/ui/Spinner';
 import { getCommunityPlans, upvotePlan, removeUpvote } from '../services/communityService';
 import { useAuth } from '../contexts/AuthContext';
@@ -68,7 +69,7 @@ export function CommunityScreen() {
           onClick={() => setSort(s => s === 'top' ? 'new' : 'top')}
           className="ml-auto text-xs text-primary-600 dark:text-primary-400 whitespace-nowrap"
         >
-          {sort === 'top' ? '▼ Top' : '🕐 New'}
+          {sort === 'top' ? 'Top rated' : 'Newest'}
         </button>
       </div>
 
@@ -84,15 +85,17 @@ export function CommunityScreen() {
             description="Be the first to share a training plan!"
           />
         ) : (
-          plans.map(plan => (
-            <CommunityPlanCard
-              key={plan.id}
-              plan={plan}
-              hasUpvoted={plan.user_has_upvoted}
-              onClick={() => navigate(`/community/${plan.id}`)}
-              onUpvote={() => handleUpvote(plan)}
-            />
-          ))
+          <FadeIn className="flex flex-col gap-3">
+            {plans.map(plan => (
+              <CommunityPlanCard
+                key={plan.id}
+                plan={plan}
+                hasUpvoted={plan.user_has_upvoted}
+                onClick={() => navigate(`/community/${plan.id}`)}
+                onUpvote={() => handleUpvote(plan)}
+              />
+            ))}
+          </FadeIn>
         )}
       </div>
     </div>

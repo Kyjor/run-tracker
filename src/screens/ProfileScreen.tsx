@@ -84,12 +84,14 @@ export function ProfileScreen() {
   }
 
   const menuItems = [
-    { icon: '📋', label: 'My Plans', path: '/profile/plans' },
-    { icon: '🎯', label: 'Goals', path: '/profile/goals' },
-    { icon: '👤', label: 'View My Public Profile', path: user ? `/social/profile/${user.id}` : '/auth' },
-    { icon: '👥', label: 'Friends', path: '/social' },
-    { icon: '🌐', label: 'Community Plans', path: '/community' },
-    { icon: '⚙️', label: 'Settings', path: '/settings' },
+    { label: 'My Plans', path: '/profile/plans' },
+    { label: 'Goals', path: '/profile/goals' },
+    { label: 'Achievements', path: '/profile/achievements' },
+    { label: 'Nutrition', path: '/profile/nutrition' },
+    { label: 'Public Profile', path: user ? `/social/profile/${user.id}` : '/auth' },
+    { label: 'Friends', path: '/social' },
+    { label: 'Community Plans', path: '/community' },
+    { label: 'Settings', path: '/settings' },
   ];
 
   return (
@@ -146,7 +148,7 @@ export function ProfileScreen() {
               <p className="text-xs text-gray-400">Runs</p>
             </div>
             <div className="text-center">
-              <p className="font-bold text-gray-900 dark:text-white">{streak}🔥</p>
+              <p className="font-bold text-gray-900 dark:text-white tabular-nums">{streak}</p>
               <p className="text-xs text-gray-400">Streak</p>
             </div>
           </div>
@@ -182,8 +184,7 @@ export function ProfileScreen() {
                 i > 0 ? 'border-t border-gray-100 dark:border-gray-700' : '',
               ].join(' ')}
             >
-              <span className="text-xl w-8 text-center">{item.icon}</span>
-              <span className="text-sm font-medium text-gray-800 dark:text-gray-100 flex-1">{item.label}</span>
+              <span className="text-sm font-medium text-ink-primary dark:text-ink-dark-primary flex-1">{item.label}</span>
               <span className="text-gray-300 dark:text-gray-600">›</span>
             </button>
           ))}

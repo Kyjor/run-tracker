@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
@@ -56,7 +57,7 @@ export function CommentModal({ isOpen, onClose, activityId, onCommentAdded }: Co
     }
   }
 
-  return (
+  return createPortal(
     <Modal
       isOpen={isOpen}
       onClose={onClose}
@@ -112,7 +113,8 @@ export function CommentModal({ isOpen, onClose, activityId, onCommentAdded }: Co
           )}
         </div>
       </div>
-    </Modal>
+    </Modal>,
+    document.body,
   );
 }
 

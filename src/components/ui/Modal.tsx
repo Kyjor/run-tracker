@@ -35,7 +35,7 @@ export function Modal({ isOpen, onClose, title, children, footer }: ModalProps) 
         onClick={onClose}
       />
       {/* Sheet */}
-      <div className="relative w-full sm:max-w-md bg-white dark:bg-gray-800 rounded-t-3xl sm:rounded-3xl animate-slide-up shadow-2xl flex flex-col" style={{ maxHeight: 'calc(100dvh - 100px)' }}>
+      <div className="relative w-full sm:max-w-md bg-surface dark:bg-surface-dark-elevated rounded-t-sheet sm:rounded-sheet animate-slide-up shadow-2xl flex flex-col" style={{ maxHeight: 'calc(100dvh - 80px)' }}>
         {/* Header */}
         {title && (
           <div className="flex-shrink-0 px-6 pt-6 pb-2">
@@ -46,7 +46,7 @@ export function Modal({ isOpen, onClose, title, children, footer }: ModalProps) 
         <div className="flex-1 overflow-y-auto px-6 py-4 text-gray-700 dark:text-gray-200 min-h-0">
           {children}
         </div>
-        {footer && <div className="flex-shrink-0 px-6 pb-20 border-t border-gray-100 dark:border-gray-700 pt-4 bg-white dark:bg-gray-800">{footer}</div>}
+        {footer && <div className="flex-shrink-0 px-6 pb-safe-bottom border-t border-border dark:border-border-dark pt-4 bg-surface dark:bg-surface-dark-elevated">{footer}</div>}
       </div>
     </div>
   );

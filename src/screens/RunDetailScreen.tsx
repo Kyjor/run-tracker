@@ -13,7 +13,9 @@ import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { getRunById, getRouteForRun } from '../services/runService';
 import { mergeHealthKitMetricsIntoRun } from '../services/healthkitService';
-import { getRunByUserAndId, getProfileById } from '../services/socialService';
+import { getRunByUserAndId, getProfileById, getRouteForFriendRun } from '../services/socialService';
+import { FadeIn } from '../components/motion/FadeIn';
+import { RunDetailSocial } from '../components/social/RunDetailSocial';
 import { formatDistance, formatDuration, formatPace, calcPaceSeconds } from '../utils/paceUtils';
 import { formatLong } from '../utils/dateUtils';
 import { computeRouteSplits } from '../utils/routeSplits';
@@ -65,12 +67,12 @@ export function RunDetailScreen() {
       Promise.all([
         getRunByUserAndId(userId, id),
         getProfileById(userId),
+        getRouteForFriendRun(userId, id),
       ])
-        .then(([r, profile]) => {
+        .then(([r, profile, route]) => {
           setRun(r);
           setFriendName(profile?.display_name ?? null);
-          // TODO: fetch route for friend runs from Supabase if needed
-          setRoutePoints(null);
+          setRoutePoints(route);
         })
         .catch(() => {
           setRun(null);
@@ -131,6 +133,7 @@ export function RunDetailScreen() {
     );
   }
 
+  const ownerId = searchParams.get('userId') ?? user?.id;
   const color = ACTIVITY_COLORS[run.run_type as keyof typeof ACTIVITY_COLORS] ?? ACTIVITY_COLORS['easy_run'];
   const pace = calcPaceSeconds(run.distance_value, run.duration_seconds, run.distance_unit);
   const hasMetrics = run.avg_heart_rate != null || run.avg_cadence != null
@@ -228,9 +231,13 @@ export function RunDetailScreen() {
         </div>
 
         {/* ── Route map ────────────────────────────────────────── */}
-        {!isFriendRun && run.has_route && routePoints && (
-          <RunRouteMap points={routePoints} />
+        {routePoints && routePoints.length >= 2 && (
+          <FadeIn>
+            <RunRouteMap points={routePoints} className="h-56" interactive={false} />
+          </FadeIn>
         )}
+
+        {user && id && ownerId && <RunDetailSocial runId={id} ownerUserId={ownerId} />}
 
         {splits.length > 0 && (
           <RunSplitsSection splits={splits} unit={settings.units} />

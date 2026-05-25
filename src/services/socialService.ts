@@ -4,7 +4,7 @@
  */
 
 import { supabase } from './supabaseClient';
-import type { Profile, Follow, FeedItem, FeedComment, Run, TrainingPlan, PlanDay } from '../types';
+import type { Profile, Follow, FeedItem, FeedComment, Run, TrainingPlan, PlanDay, RoutePoint } from '../types';
 
 // ---------------------------------------------------------------------------
 // Profile
@@ -136,6 +136,54 @@ export async function getRunsByUser(userId: string, limit = 20): Promise<Run[]> 
 }
 
 /** Fetch a single run by ID for any user from Supabase */
+export async function getRouteForFriendRun(userId: string, runId: string): Promise<RoutePoint[] | null> {
+  const { data } = await supabase
+    .from('user_run_routes')
+    .select('points_json')
+    .eq('user_id', userId)
+    .eq('run_id', runId)
+    .maybeSingle();
+  if (!data?.points_json) return null;
+  try {
+    const pts = JSON.parse(data.points_json as string) as RoutePoint[];
+    return Array.isArray(pts) && pts.length >= 2 ? pts : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function getActivityEngagement(activityId: string): Promise<{
+  likes_count: number;
+  comments_count: number;
+  user_has_liked: boolean;
+}> {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) return { likes_count: 0, comments_count: 0, user_has_liked: false };
+  const [likesRes, commentsRes, userLikeRes] = await Promise.all([
+    supabase.from('feed_likes').select('id').eq('activity_id', activityId),
+    supabase.from('feed_comments').select('id').eq('activity_id', activityId),
+    supabase.from('feed_likes').select('id').eq('activity_id', activityId).eq('user_id', session.user.id).maybeSingle(),
+  ]);
+  return {
+    likes_count: likesRes.data?.length ?? 0,
+    comments_count: commentsRes.data?.length ?? 0,
+    user_has_liked: !!userLikeRes.data,
+  };
+}
+
+export async function getFeedLikers(activityId: string): Promise<Profile[]> {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) return [];
+  const { data: likes } = await supabase
+    .from('feed_likes')
+    .select('user_id')
+    .eq('activity_id', activityId);
+  if (!likes?.length) return [];
+  const ids = likes.map(l => l.user_id);
+  const { data: profiles } = await supabase.from('profiles').select('*').in('id', ids);
+  return profiles ?? [];
+}
+
 export async function getRunByUserAndId(userId: string, runId: string): Promise<Run | null> {
   const { data } = await supabase
     .from('user_runs')
@@ -255,14 +303,31 @@ export async function getFeed(limit = 30, offset = 0): Promise<FeedItem[]> {
 
   if (!runs || runs.length === 0) return [];
 
-  // Fetch profiles for these users
-  const userIds = [...new Set(runs.map(r => r.user_id))];
-  const { data: profiles } = await supabase
-    .from('profiles')
-    .select('*')
-    .in('id', userIds);
+  const runIds = runs.map(r => r.id);
 
-  const profileMap = new Map((profiles ?? []).map(p => [p.id, p]));
+  // Fetch profiles and routes in batch
+  const userIds = [...new Set(runs.map(r => r.user_id))];
+  const [profilesRes, routesRes] = await Promise.all([
+    supabase.from('profiles').select('*').in('id', userIds),
+    supabase
+      .from('user_run_routes')
+      .select('run_id, points_json')
+      .in('run_id', runIds)
+      .in('user_id', followingIds),
+  ]);
+
+  const profileMap = new Map((profilesRes.data ?? []).map(p => [p.id, p]));
+  const routeMap = new Map<string, RoutePoint[]>();
+  for (const row of routesRes.data ?? []) {
+    try {
+      const pts = JSON.parse(row.points_json as string) as RoutePoint[];
+      if (Array.isArray(pts) && pts.length >= 2) {
+        routeMap.set(row.run_id as string, pts);
+      }
+    } catch {
+      // skip invalid route json
+    }
+  }
 
   // For each run, find or create a feed_activity
   const feedItems: FeedItem[] = [];
@@ -323,6 +388,7 @@ export async function getFeed(limit = 30, offset = 0): Promise<FeedItem[]> {
       likes_count: likesRes.data?.length ?? 0,
       comments_count: commentsRes.data?.length ?? 0,
       user_has_liked: !!userLikeRes.data,
+      route_points: routeMap.get(run.id),
     });
   }
 
@@ -366,17 +432,17 @@ export async function publishFeedActivity(
 // Comments & Likes
 // ---------------------------------------------------------------------------
 
-/** Find feed activity ID for a run (to view comments on own runs) */
-export async function getFeedActivityIdByRunId(runId: string): Promise<string | null> {
+/** Find feed activity ID for a run (own runs or friend runs on detail screen) */
+export async function getFeedActivityIdByRunId(runId: string, ownerUserId?: string): Promise<string | null> {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) return null;
 
-  // Find all feed activities where data contains this run_id
-  // (duplicates can exist from earlier versions, so pick the one with most comments)
+  const userId = ownerUserId ?? session.user.id;
+
   const { data: activities } = await supabase
     .from('feed_activities')
     .select('id, created_at')
-    .eq('user_id', session.user.id)
+    .eq('user_id', userId)
     .eq('activity_type', 'run_completed')
     .contains('data', { run_id: runId })
     .order('created_at', { ascending: true });

@@ -26,6 +26,8 @@ interface RunRouteMapProps {
   points: RoutePoint[];
   className?: string;
   followLatest?: boolean;
+  /** When false, map is display-only (feed thumbnails) */
+  interactive?: boolean;
 }
 
 function toLineGeoJSON(points: RoutePoint[]): GeoJSON.Feature<GeoJSON.LineString> {
@@ -135,7 +137,7 @@ function isDarkMode(): boolean {
   return document.documentElement.classList.contains('dark');
 }
 
-export function RunRouteMap({ points, className = '', followLatest = false }: RunRouteMapProps) {
+export function RunRouteMap({ points, className = '', followLatest = false, interactive = true }: RunRouteMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const pointsRef = useRef(points);
@@ -153,7 +155,8 @@ export function RunRouteMap({ points, className = '', followLatest = false }: Ru
       style: getMapStyle(isDarkRef.current),
       center: [-98, 39],
       zoom: 4,
-      attributionControl: { compact: true },
+      attributionControl: interactive ? { compact: true } : false,
+      interactive,
     });
 
     mapRef.current = map;

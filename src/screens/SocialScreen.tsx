@@ -2,7 +2,9 @@ import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { FeedItem, Profile } from '../types';
 import { Header } from '../components/navigation/Header';
-import { ActivityFeedItem } from '../components/social/ActivityFeedItem';
+import { ActivityFeedCard } from '../components/social/ActivityFeedCard';
+import { SegmentedControl } from '../components/ui/SegmentedControl';
+import { Avatar } from '../components/ui/Avatar';
 import { FollowButton } from '../components/social/FollowButton';
 import { EmptyState } from '../components/ui/EmptyState';
 import { Spinner } from '../components/ui/Spinner';
@@ -15,12 +17,10 @@ type Tab = 'feed' | 'following' | 'followers';
 
 function ProfileRow({ profile, onPress }: { profile: Profile; onPress: () => void }) {
   return (
-    <div className="flex items-center gap-3 bg-white dark:bg-gray-800 p-3 rounded-2xl shadow-sm">
-      <button className="flex items-center gap-3 flex-1 text-left" onClick={onPress}>
-        <div className="w-10 h-10 rounded-full bg-primary-200 dark:bg-primary-700 flex items-center justify-center text-lg font-semibold text-primary-800 dark:text-primary-200 flex-shrink-0">
-          {profile.display_name?.[0]?.toUpperCase() ?? '?'}
-        </div>
-        <p className="font-medium text-gray-900 dark:text-white">{profile.display_name}</p>
+    <div className="flex items-center gap-3 bg-surface dark:bg-surface-dark-elevated p-3 rounded-card border border-border dark:border-border-dark shadow-card">
+      <button type="button" className="flex items-center gap-3 flex-1 text-left" onClick={onPress}>
+        <Avatar name={profile.display_name ?? '?'} size="md" />
+        <p className="font-medium text-ink-primary dark:text-ink-dark-primary">{profile.display_name}</p>
       </button>
       <FollowButton targetId={profile.id} />
     </div>
@@ -111,22 +111,12 @@ export function SocialScreen() {
         }
       />
 
-      {/* Tab bar */}
-      <div className="flex mx-4 mt-3 mb-1 bg-gray-100 dark:bg-gray-800 rounded-xl p-1 gap-1">
-        {tabs.map(t => (
-          <button
-            key={t.id}
-            onClick={() => setTab(t.id)}
-            className={[
-              'flex-1 text-sm font-medium py-1.5 rounded-lg transition-colors',
-              tab === t.id
-                ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
-                : 'text-gray-500 dark:text-gray-400',
-            ].join(' ')}
-          >
-            {t.label}
-          </button>
-        ))}
+      <div className="px-4 mt-3 mb-1">
+        <SegmentedControl
+          options={tabs.map(t => ({ value: t.id, label: t.label }))}
+          value={tab}
+          onChange={setTab}
+        />
       </div>
 
       <PullToRefresh onRefresh={handleRefresh}>
@@ -145,14 +135,11 @@ export function SocialScreen() {
             />
           ) : (
             feed.map(item => (
-              <ActivityFeedItem
+              <ActivityFeedCard
                 key={item.id}
                 item={item}
                 onLike={() => handleLike(item)}
-                onCommentAdded={() => {
-                  // Refresh feed to update comment counts
-                  loadFeed();
-                }}
+                onCommentAdded={() => loadFeed()}
               />
             ))
           )

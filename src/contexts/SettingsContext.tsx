@@ -29,12 +29,20 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     });
   }, [db, isReady]);
 
-  // Apply dark mode class to document
+  // Apply dark mode class to document (+ listen for system changes)
   useEffect(() => {
-    const { dark_mode } = settings;
-    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    const isDark = dark_mode === 'dark' || (dark_mode === 'system' && prefersDark);
-    document.documentElement.classList.toggle('dark', isDark);
+    const apply = () => {
+      const { dark_mode } = settings;
+      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      const isDark = dark_mode === 'dark' || (dark_mode === 'system' && prefersDark);
+      document.documentElement.classList.toggle('dark', isDark);
+    };
+    apply();
+    if (settings.dark_mode !== 'system') return;
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    const handler = () => apply();
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
   }, [settings.dark_mode]);
 
   const updateSettings = useCallback(async (updates: Partial<AppSettings>) => {

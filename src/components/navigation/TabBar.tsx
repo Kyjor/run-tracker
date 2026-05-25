@@ -52,7 +52,7 @@ export function TabBar() {
   const navigate = useNavigate();
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-gray-900/95 backdrop-blur-lg border-t border-gray-200 dark:border-gray-700 pb-safe-bottom">
+    <nav className="fixed bottom-0 left-0 right-0 z-40 bg-surface/95 dark:bg-surface-dark/95 backdrop-blur-lg border-t border-border dark:border-border-dark pb-safe-bottom">
       <div className="flex items-end justify-around px-2 pt-2 pb-1">
         {TABS.map(tab => {
           const isLog = tab.path === '/log';

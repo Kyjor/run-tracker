@@ -5,6 +5,7 @@ import type { Profile, Run, TrainingPlan, PlanDay } from '../types';
 import { RUN_TYPE_LABELS, RACE_TYPE_LABELS, DIFFICULTY_LABELS, ACTIVITY_COLORS, ACTIVITY_LABELS } from '../types';
 import { Header } from '../components/navigation/Header';
 import { Card, SectionHeader } from '../components/ui/Card';
+import { SegmentedControl } from '../components/ui/SegmentedControl';
 import { Spinner } from '../components/ui/Spinner';
 import { EmptyState } from '../components/ui/EmptyState';
 import { Badge } from '../components/ui/Badge';
@@ -330,21 +331,17 @@ export function FriendProfileScreen() {
         {allRuns.length > 0 && (
           <>
             {/* Range Picker */}
-            <div className="flex gap-2 pt-2 pb-2 overflow-x-auto sticky top-0 bg-gray-50 dark:bg-gray-900 z-10 border-b border-gray-200 dark:border-gray-700 -mx-4 px-4">
-              {(['week', 'month', 'year', 'all'] as const).map(r => (
-                <button
-                  key={r}
-                  onClick={() => setStatsRange(r)}
-                  className={[
-                    'px-3 py-1.5 rounded-xl text-sm font-medium whitespace-nowrap transition-colors',
-                    statsRange === r
-                      ? 'bg-primary-600 text-white'
-                      : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400',
-                  ].join(' ')}
-                >
-                  {r === 'week' ? 'This Week' : r === 'month' ? 'This Month' : r === 'year' ? 'This Year' : 'All Time'}
-                </button>
-              ))}
+            <div className="pt-2 pb-2 sticky top-0 bg-surface-elevated dark:bg-surface-dark z-10 border-b border-border dark:border-border-dark -mx-4 px-4">
+              <SegmentedControl
+                options={[
+                  { value: 'week' as const, label: 'Week' },
+                  { value: 'month' as const, label: 'Month' },
+                  { value: 'year' as const, label: 'Year' },
+                  { value: 'all' as const, label: 'All' },
+                ]}
+                value={statsRange}
+                onChange={setStatsRange}
+              />
             </div>
 
             {/* Summary Stats */}

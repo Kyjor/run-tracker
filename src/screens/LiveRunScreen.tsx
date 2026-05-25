@@ -6,6 +6,8 @@ import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Spinner } from '../components/ui/Spinner';
 import { RunRouteMap } from '../components/run/RunRouteMap';
+import { AnimatedNumber } from '../components/motion/AnimatedNumber';
+import { FadeIn } from '../components/motion/FadeIn';
 import { useDb } from '../contexts/DatabaseContext';
 import { useSettings } from '../contexts/SettingsContext';
 import { useToast } from '../contexts/ToastContext';
@@ -205,52 +207,51 @@ export function LiveRunScreen() {
   }
 
   return (
-    <div className="flex flex-col flex-1 overflow-y-auto pb-24">
+    <div className="flex flex-col flex-1 overflow-y-auto pb-safe-bottom">
       <Header title="Live Run" showBack={!isRunning} />
 
+      {isRunning && (
+        <div className="relative mx-4 mt-2">
+          <RunRouteMap points={points} followLatest className="h-72 rounded-card" />
+          <div className="absolute bottom-3 left-3 right-3 flex gap-2">
+            <MetricPill label="Time" live={elapsedSeconds} format={(n) => formatDuration(Math.floor(n))} />
+            <MetricPill label={unit} live={distanceValue} format={(n) => formatDistance(n, unit)} />
+            <MetricPill label="Pace" value={formatPace(paceSeconds, unit)} />
+          </div>
+        </div>
+      )}
+
       <div className="px-4 pt-4 flex flex-col gap-4">
-        <Card>
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <p className="text-xs uppercase tracking-wide text-gray-400 dark:text-gray-500">Duration</p>
-              <p className="text-2xl font-semibold text-gray-900 dark:text-gray-50">
-                {formatDuration(elapsedSeconds)}
-              </p>
-            </div>
-            <div>
-              <p className="text-xs uppercase tracking-wide text-gray-400 dark:text-gray-500">Distance</p>
-              <p className="text-2xl font-semibold text-gray-900 dark:text-gray-50">
-                {formatDistance(distanceValue, unit)}
-              </p>
-            </div>
-            <div>
-              <p className="text-xs uppercase tracking-wide text-gray-400 dark:text-gray-500">Pace</p>
-              <p className="text-2xl font-semibold text-gray-900 dark:text-gray-50">
-                {formatPace(paceSeconds, unit)}
-              </p>
-            </div>
-          </div>
-
-          <div className="mt-4 flex flex-col gap-2">
-            <p className="text-xs text-gray-500 dark:text-gray-400">
-              {lastPoint
-                ? `GPS locked · ${lastPoint.lat.toFixed(5)}, ${lastPoint.lng.toFixed(5)}${
-                    lastPoint.accuracy ? ` · ±${Math.round(lastPoint.accuracy)}m` : ''
-                  }`
-                : 'Waiting for GPS fix...'}
-            </p>
-            {permissionWarning && (
-              <p className="text-xs text-amber-600 dark:text-amber-400">{permissionWarning}</p>
-            )}
-            {error && (
-              <p className="text-xs text-red-500">{error}</p>
-            )}
-          </div>
-        </Card>
-
-        {isRunning && (
-          <RunRouteMap points={points} followLatest className="h-64" />
+        {!isRunning && (
+          <FadeIn>
+            <Card>
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-ink-muted">Duration</p>
+                  <p className="text-2xl font-semibold tabular-nums">{formatDuration(elapsedSeconds)}</p>
+                </div>
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-ink-muted">Distance</p>
+                  <p className="text-2xl font-semibold tabular-nums">{formatDistance(distanceValue, unit)}</p>
+                </div>
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-ink-muted">Pace</p>
+                  <p className="text-2xl font-semibold tabular-nums">{formatPace(paceSeconds, unit)}</p>
+                </div>
+              </div>
+            </Card>
+          </FadeIn>
         )}
+
+        <div className="flex flex-col gap-1 px-1">
+          <p className="text-xs text-ink-secondary">
+            {lastPoint
+              ? `GPS · ±${lastPoint.accuracy ? Math.round(lastPoint.accuracy) : '?'}m`
+              : 'Waiting for GPS fix…'}
+          </p>
+          {permissionWarning && <p className="text-xs text-amber-600 dark:text-amber-400">{permissionWarning}</p>}
+          {error && <p className="text-xs text-red-500">{error}</p>}
+        </div>
 
         <Card>
           <div className="flex flex-col items-center gap-4">
@@ -280,6 +281,27 @@ export function LiveRunScreen() {
           </div>
         </Card>
       </div>
+    </div>
+  );
+}
+
+function MetricPill({
+  label,
+  value,
+  live,
+  format,
+}: {
+  label: string;
+  value?: string;
+  live?: number;
+  format?: (n: number) => string;
+}) {
+  return (
+    <div className="flex-1 rounded-2xl bg-map-overlay backdrop-blur-md px-3 py-2 text-center">
+      <p className="text-[10px] uppercase tracking-wide text-white/70">{label}</p>
+      <p className="text-sm font-bold text-white tabular-nums">
+        {live != null && format ? <AnimatedNumber value={live} format={format} /> : value}
+      </p>
     </div>
   );
 }
