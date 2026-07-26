@@ -14,18 +14,12 @@ concurrency:
 jobs:
   build-and-deploy:
     name: Build iOS & Upload to TestFlight
-    runs-on: macos-14   # Apple Silicon runner with Xcode 15+
+    runs-on: macos-14
 
     steps:
-      # -----------------------------------------------------------------------
-      # 1. Checkout
-      # -----------------------------------------------------------------------
       - name: Checkout
         uses: actions/checkout@v4
 
-      # -----------------------------------------------------------------------
-      # 2. Set up Node
-      # -----------------------------------------------------------------------
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
@@ -35,9 +29,6 @@ jobs:
       - name: Install npm dependencies
         run: npm ci
 
-      # -----------------------------------------------------------------------
-      # 3. Set up Rust toolchain + iOS targets
-      # -----------------------------------------------------------------------
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
 
@@ -52,90 +43,105 @@ jobs:
         with:
           workspaces: src-tauri
 
-      # -----------------------------------------------------------------------
-      # 4. Set up Ruby & Fastlane
-      # -----------------------------------------------------------------------
-      - name: Set up Ruby
-        uses: ruby/setup-ruby@v1
-        with:
-          ruby-version: '3.2'
-          bundler-cache: true
+      # Point Rust at whatever clang_rt.ios the runner's Xcode ships (local machines
+      # may have clang/21; GitHub runners often have an older version).
+      - name: Configure Rust iOS linker paths
+        run: |
+          CLANG_LIB="$(ls -d "$(xcode-select -p)/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/"*/lib/darwin 2>/dev/null | sort -V | tail -1)"
+          if [ -z "$CLANG_LIB" ]; then
+            echo "Could not find Xcode clang darwin lib dir"
+            exit 1
+          fi
+          echo "Using clang darwin libs at: $CLANG_LIB"
+          mkdir -p src-tauri/.cargo
+          cat > src-tauri/.cargo/config.toml <<EOF
+[target.aarch64-apple-ios]
+rustflags = ["-C", "link-arg=-L${CLANG_LIB}"]
 
-      # -----------------------------------------------------------------------
-      # 5. Install Apple certificates & provisioning profiles
-      # -----------------------------------------------------------------------
+[target.aarch64-apple-ios-sim]
+rustflags = ["-C", "link-arg=-L${CLANG_LIB}"]
+
+[target.x86_64-apple-ios]
+rustflags = ["-C", "link-arg=-L${CLANG_LIB}"]
+EOF
+
       - name: Install Apple Certificate
         uses: apple-actions/import-codesign-certs@v3
         with:
           p12-file-base64: ${{ secrets.APPLE_DISTRIBUTION_CERT_P12 }}
           p12-password: ${{ secrets.APPLE_DISTRIBUTION_CERT_PASSWORD }}
-          keychain-password: ${{ secrets.KEYCHAIN_PASSWORD }}
+          keychain-password: ${{ github.run_id }}
 
       - name: Install Provisioning Profile
+        env:
+          PROFILE_BASE64: ${{ secrets.PROVISIONING_PROFILE_BASE64 }}
         run: |
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
-          echo "${{ secrets.PROVISIONING_PROFILE_BASE64 }}" | base64 --decode \
-            > ~/Library/MobileDevice/Provisioning\ Profiles/profile.mobileprovision
+          PROFILE_TMP="$(mktemp)"
+          echo "$PROFILE_BASE64" | base64 --decode > "$PROFILE_TMP"
+          UUID="$(security cms -D -i "$PROFILE_TMP" | plutil -extract UUID raw -)"
+          cp "$PROFILE_TMP" "$HOME/Library/MobileDevice/Provisioning Profiles/${UUID}.mobileprovision"
+          echo "Installed provisioning profile UUID=$UUID"
+          rm -f "$PROFILE_TMP"
 
-      # -----------------------------------------------------------------------
-      # 6. Write environment variables for the build
-      # -----------------------------------------------------------------------
       - name: Create .env
         run: |
-          cat > .env << EOF
-          VITE_SUPABASE_URL=${{ secrets.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY=${{ secrets.VITE_SUPABASE_ANON_KEY }}
-          EOF
+          cat > .env <<EOF
+VITE_SUPABASE_URL=${{ secrets.VITE_SUPABASE_URL }}
+VITE_SUPABASE_ANON_KEY=${{ secrets.VITE_SUPABASE_ANON_KEY }}
+EOF
 
-      # -----------------------------------------------------------------------
-      # 7. Auto-increment build number (CFBundleVersion = GitHub run number)
-      # -----------------------------------------------------------------------
       - name: Set build number
         run: |
           BUILD_NUM=${{ github.run_number }}
-          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUM" \
-            src-tauri/gen/apple/runwithfriends_iOS/Info.plist || true
-          echo "BUILD_NUMBER=$BUILD_NUM" >> $GITHUB_ENV
+          PLIST="src-tauri/gen/apple/run-with-friends_iOS/Info.plist"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUM" "$PLIST"
+          if [ -f src-tauri/gen/apple/project.yml ]; then
+            sed -i '' "s/CFBundleVersion: .*/CFBundleVersion: $BUILD_NUM/" src-tauri/gen/apple/project.yml
+          fi
+          echo "BUILD_NUMBER=$BUILD_NUM" >> "$GITHUB_ENV"
 
-      # -----------------------------------------------------------------------
-      # 8. Build the Tauri iOS app
-      # -----------------------------------------------------------------------
-      - name: Build Tauri iOS (release)
-        run: |
-          npx tauri ios build --export-method app-store-connect
-        env:
-          APPLE_DEVELOPMENT_TEAM: ${{ secrets.APPLE_DEVELOPMENT_TEAM }}
-
-      # -----------------------------------------------------------------------
-      # 9. Upload to TestFlight via App Store Connect API
-      # -----------------------------------------------------------------------
       - name: Place App Store Connect API key
         env:
           APP_STORE_CONNECT_API_KEY_CONTENT: ${{ secrets.APP_STORE_CONNECT_API_KEY_CONTENT }}
         run: |
           mkdir -p ~/.appstoreconnect/private_keys
-          echo "$APP_STORE_CONNECT_API_KEY_CONTENT" \
-            > ~/.appstoreconnect/private_keys/AuthKey_${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}.p8
+          KEY_PATH="$HOME/.appstoreconnect/private_keys/AuthKey_${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}.p8"
+          printf '%s' "$APP_STORE_CONNECT_API_KEY_CONTENT" > "$KEY_PATH"
+          echo "APPLE_API_KEY_PATH=$KEY_PATH" >> "$GITHUB_ENV"
+
+      - name: Build Tauri iOS (release)
+        run: npx tauri ios build --export-method app-store-connect
+        env:
+          APPLE_DEVELOPMENT_TEAM: ${{ secrets.APPLE_DEVELOPMENT_TEAM }}
+          APPLE_API_ISSUER: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APPLE_API_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          APPLE_API_KEY_PATH: ${{ env.APPLE_API_KEY_PATH }}
 
       - name: Upload to TestFlight
         run: |
+          BUILD_DIR="src-tauri/gen/apple/build/arm64"
+          IPA="$(find "$BUILD_DIR" -maxdepth 1 -name '*.ipa' -print -quit 2>/dev/null || true)"
+          if [ -z "$IPA" ]; then
+            IPA="$(find src-tauri/gen/apple/build -name '*.ipa' -print -quit 2>/dev/null || true)"
+          fi
+          if [ -z "$IPA" ] || [ ! -f "$IPA" ]; then
+            echo "No IPA found under src-tauri/gen/apple/build"
+            find src-tauri/gen/apple/build -type f 2>/dev/null || true
+            exit 1
+          fi
+          echo "Uploading $IPA"
           xcrun altool \
             --upload-app \
             --type ios \
-            --file "src-tauri/gen/apple/build/runwithfriends.ipa" \
-            --apiKey ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }} \
-            --apiIssuer ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+            --file "$IPA" \
+            --apiKey "${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}" \
+            --apiIssuer "${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}"
 
-      # -----------------------------------------------------------------------
-      # 10. Notify on success/failure
-      # -----------------------------------------------------------------------
       - name: Notify success
         if: success()
-        run: |
-          echo "✅ Build ${{ env.BUILD_NUMBER }} successfully uploaded to TestFlight."
+        run: echo "Build ${{ env.BUILD_NUMBER }} successfully uploaded to TestFlight."
 
       - name: Notify failure
         if: failure()
-        run: |
-          echo "❌ TestFlight deployment failed. Check the logs above."
-
+        run: echo "TestFlight deployment failed. Check the logs above."

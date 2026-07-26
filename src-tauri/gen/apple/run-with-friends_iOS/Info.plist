@@ -15,9 +15,9 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.6.0</string>
+	<string>0.6.1</string>
 	<key>CFBundleVersion</key>
-	<string>0.6.0</string>
+	<string>3</string>
 	<key>CFBundleDocumentTypes</key>
 	<array>
 		<dict>
@@ -43,6 +43,10 @@
 	<string>We use your location to reliably track runs even when the app is not in the foreground.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>We use your location to track runs and show your GPS route.</string>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>Run 4 Fun connects to Bluetooth heart rate monitors during live runs.</string>
+	<key>NSBluetoothPeripheralUsageDescription</key>
+	<string>Run 4 Fun connects to Bluetooth heart rate monitors during live runs.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>location</string>

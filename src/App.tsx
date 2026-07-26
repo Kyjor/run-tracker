@@ -30,6 +30,7 @@ import { MyPlansScreen } from './screens/MyPlansScreen';
 import { PlanDetailScreen } from './screens/PlanDetailScreen';
 import { PlanEditorScreen } from './screens/PlanEditorScreen';
 import { GoalsScreen } from './screens/GoalsScreen';
+import { GearScreen } from './screens/GearScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
 import { CommunityScreen } from './screens/CommunityScreen';
 import { SocialScreen } from './screens/SocialScreen';
@@ -173,6 +174,7 @@ function AppShell() {
           <Route path="/profile/plans/new" element={<PlanEditorScreen />} />
           <Route path="/profile/plans/:id" element={<PlanDetailScreen />} />
           <Route path="/profile/goals" element={<GoalsScreen />} />
+          <Route path="/profile/gear" element={<GearScreen />} />
           <Route path="/profile/nutrition" element={<NutritionScreen />} />
           <Route path="/profile/achievements" element={<AchievementsScreen />} />
           <Route path="/settings" element={<SettingsScreen />} />

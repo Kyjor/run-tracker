@@ -307,7 +307,7 @@ export function SettingsScreen() {
           <SectionHeader title="Heart Rate & Fitness" />
           <Card className="flex flex-col gap-3">
             <p className="text-xs text-gray-500 dark:text-gray-400">
-              Used to calculate HR zones when importing Apple Health workouts.
+              Used for zones during live runs and imports.
               Estimate: 220 − your age.
             </p>
             <MaxHRInput

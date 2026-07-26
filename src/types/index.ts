@@ -154,7 +154,7 @@ export interface Run {
   run_type: RunType;
   plan_day_id: string | null;
   notes: string;
-  source: 'manual' | 'healthkit' | 'fit';
+  source: 'manual' | 'healthkit' | 'fit' | 'live';
 
   // ── Heart Rate ──────────────────────────────────────────
   avg_heart_rate: number | null;
@@ -216,6 +216,46 @@ export interface Goal {
   created_at: string;
   sync_status: SyncStatus;
 }
+
+// ============================================================
+// Gear
+// ============================================================
+
+export type GearType = 'shoes' | 'heart_rate_monitor' | 'watch' | 'bike' | 'other';
+
+export interface Gear {
+  id: string;
+  type: GearType;
+  name: string;
+  brand: string | null;
+  model: string | null;
+  purchase_date: string | null;
+  notes: string;
+  is_active: number; // 0 or 1
+  retired_at: string | null;
+  /** Shoe replacement threshold in miles */
+  alert_threshold_mi: number | null;
+  created_at: string;
+  updated_at: string;
+  sync_status: SyncStatus;
+}
+
+export interface GearStats {
+  gear_id: string;
+  total_distance_mi: number;
+  run_count: number;
+  last_used_date: string | null;
+}
+
+export const GEAR_TYPE_LABELS: Record<GearType, string> = {
+  shoes: 'Shoes',
+  heart_rate_monitor: 'Heart Rate Monitor',
+  watch: 'Watch',
+  bike: 'Bike',
+  other: 'Other',
+};
+
+export const DEFAULT_SHOE_ALERT_MI = 400;
 
 export interface SyncQueueItem {
   id: string;

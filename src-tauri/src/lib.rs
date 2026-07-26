@@ -77,6 +77,15 @@ extern "C" {
         result_ptr: *mut *mut std::ffi::c_char,
         result_len: *mut usize,
     ) -> i32;
+
+    #[link_name = "hrm_start_scan"]
+    fn hrm_ffi_start_scan() -> i32;
+
+    #[link_name = "hrm_stop_scan"]
+    fn hrm_ffi_stop_scan() -> i32;
+
+    #[link_name = "hrm_is_connected"]
+    fn hrm_ffi_is_connected() -> bool;
 }
 
 // ---------------------------------------------------------------------------
@@ -101,6 +110,14 @@ pub struct LiveRunSnapshot {
     pub points: Vec<LiveRoutePoint>,
     pub last_point: Option<LiveRoutePoint>,
     pub permission_warning: Option<String>,
+    #[serde(default)]
+    pub current_heart_rate: Option<f64>,
+    #[serde(default)]
+    pub avg_heart_rate: Option<f64>,
+    #[serde(default)]
+    pub max_heart_rate: Option<f64>,
+    #[serde(default)]
+    pub min_heart_rate: Option<f64>,
 }
 
 impl LiveRunSnapshot {
@@ -113,6 +130,10 @@ impl LiveRunSnapshot {
             points: Vec::new(),
             last_point: None,
             permission_warning: None,
+            current_heart_rate: None,
+            avg_heart_rate: None,
+            max_heart_rate: None,
+            min_heart_rate: None,
         }
     }
 }
@@ -435,6 +456,47 @@ async fn get_live_run_snapshot() -> Result<LiveRunSnapshot, String> {
     }
 }
 
+#[tauri::command]
+async fn hrm_start_scan() -> Result<(), String> {
+    #[cfg(target_os = "ios")]
+    {
+        let code = unsafe { hrm_ffi_start_scan() };
+        if code < 0 {
+            return Err(String::from("Failed to start HRM scan"));
+        }
+        Ok(())
+    }
+    #[cfg(not(target_os = "ios"))]
+    {
+        Err(String::from("BLE HRM is only available on iOS"))
+    }
+}
+
+#[tauri::command]
+async fn hrm_stop_scan() -> Result<(), String> {
+    #[cfg(target_os = "ios")]
+    {
+        let _ = unsafe { hrm_ffi_stop_scan() };
+        Ok(())
+    }
+    #[cfg(not(target_os = "ios"))]
+    {
+        Ok(())
+    }
+}
+
+#[tauri::command]
+async fn hrm_is_connected() -> bool {
+    #[cfg(target_os = "ios")]
+    {
+        unsafe { hrm_ffi_is_connected() }
+    }
+    #[cfg(not(target_os = "ios"))]
+    {
+        false
+    }
+}
+
 fn stage_fit_file_from_url(url: &tauri::Url) -> Option<PendingFitFile> {
     if url.scheme() != "file" {
         return None;
@@ -514,6 +576,9 @@ pub fn run() {
             stop_live_run,
             cancel_live_run,
             get_live_run_snapshot,
+            hrm_start_scan,
+            hrm_stop_scan,
+            hrm_is_connected,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");

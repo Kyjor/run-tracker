@@ -8,6 +8,7 @@ import { useDb } from '../contexts/DatabaseContext';
 import { useToast } from '../contexts/ToastContext';
 import { usePlan } from '../contexts/PlanContext';
 import { createRun, getRunById, updateRun, deleteRun } from '../services/runService';
+import { assignGearToRun } from '../services/gearService';
 import { publishFeedActivity } from '../services/socialService';
 import { syncToCloud } from '../services/syncService';
 import { useAuth } from '../contexts/AuthContext';
@@ -35,20 +36,29 @@ export function LogRunScreen() {
   }, [db, params.id]);
 
   async function handleSubmit(values: Parameters<React.ComponentProps<typeof RunForm>['onSubmit']>[0]) {
+    const { gear_ids, ...runValues } = values;
     if (isEdit && existingRun) {
       await updateRun(db, existingRun.id, {
-        date: values.date,
-        distance_value: values.distance_value,
-        distance_unit: values.distance_unit,
-        duration_seconds: values.duration_seconds,
-        run_type: values.run_type,
-        notes: values.notes,
+        date: runValues.date,
+        distance_value: runValues.distance_value,
+        distance_unit: runValues.distance_unit,
+        duration_seconds: runValues.duration_seconds,
+        run_type: runValues.run_type,
+        notes: runValues.notes,
+        avg_heart_rate: runValues.avg_heart_rate,
+        max_heart_rate: runValues.max_heart_rate,
       });
+      await assignGearToRun(db, existingRun.id, gear_ids);
       showToast('Run updated!', 'success');
     } else {
-      const run = await createRun(db, { ...values, plan_day_id: locationState?.planDayId ?? null });
+      const run = await createRun(db, {
+        ...runValues,
+        plan_day_id: locationState?.planDayId ?? null,
+        avg_heart_rate: runValues.avg_heart_rate,
+        max_heart_rate: runValues.max_heart_rate,
+      });
+      await assignGearToRun(db, run.id, gear_ids);
       showToast('Run logged! 🎉', 'success');
-      // Publish to social feed if sync enabled
       if (session) {
         publishFeedActivity('run_completed', {
           distance: run.distance_value,
@@ -61,7 +71,6 @@ export function LogRunScreen() {
       }
     }
     await refresh();
-    // Fire-and-forget sync — don't block navigation
     if (session) syncToCloud(db).catch(() => {});
     navigate(-1);
   }

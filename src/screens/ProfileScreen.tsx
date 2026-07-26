@@ -86,6 +86,7 @@ export function ProfileScreen() {
   const menuItems = [
     { label: 'My Plans', path: '/profile/plans' },
     { label: 'Goals', path: '/profile/goals' },
+    { label: 'Gear', path: '/profile/gear' },
     { label: 'Achievements', path: '/profile/achievements' },
     { label: 'Nutrition', path: '/profile/nutrition' },
     { label: 'Public Profile', path: user ? `/social/profile/${user.id}` : '/auth' },

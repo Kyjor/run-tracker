@@ -160,6 +160,34 @@ const MIGRATIONS = [
     sync_status TEXT NOT NULL DEFAULT 'local'
   )`,
   `CREATE INDEX IF NOT EXISTS idx_fit_imports_run ON fit_imports(run_id)`,
+
+  // v10 — Gear tracking
+  `CREATE TABLE IF NOT EXISTS gear (
+    id TEXT PRIMARY KEY,
+    type TEXT NOT NULL,
+    name TEXT NOT NULL,
+    brand TEXT,
+    model TEXT,
+    purchase_date TEXT,
+    notes TEXT NOT NULL DEFAULT '',
+    is_active INTEGER NOT NULL DEFAULT 1,
+    retired_at TEXT,
+    alert_threshold_mi REAL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    sync_status TEXT NOT NULL DEFAULT 'local'
+  )`,
+  `CREATE TABLE IF NOT EXISTS run_gear (
+    run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+    gear_id TEXT NOT NULL REFERENCES gear(id) ON DELETE CASCADE,
+    PRIMARY KEY (run_id, gear_id)
+  )`,
+  `CREATE TABLE IF NOT EXISTS gear_defaults (
+    gear_type TEXT PRIMARY KEY,
+    gear_id TEXT NOT NULL REFERENCES gear(id) ON DELETE CASCADE
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_gear_type ON gear(type)`,
+  `CREATE INDEX IF NOT EXISTS idx_run_gear_run ON run_gear(run_id)`,
 ];
 
 // ---------------------------------------------------------------------------

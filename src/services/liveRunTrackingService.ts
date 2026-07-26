@@ -21,6 +21,10 @@ export interface LiveRunSnapshot {
   points: LiveRoutePoint[];
   last_point?: LiveRoutePoint;
   permission_warning?: string | null;
+  current_heart_rate?: number | null;
+  avg_heart_rate?: number | null;
+  max_heart_rate?: number | null;
+  min_heart_rate?: number | null;
 }
 
 const LIVE_RUN_TICK_EVENT = 'live-run-tick';
@@ -61,6 +65,10 @@ function webSnapshot(): LiveRunSnapshot {
       ? webSession.points[webSession.points.length - 1]
       : undefined,
     permission_warning: null,
+    current_heart_rate: null,
+    avg_heart_rate: null,
+    max_heart_rate: null,
+    min_heart_rate: null,
   };
 }
 

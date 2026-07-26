@@ -1,5 +1,6 @@
-# Rust 1.87 expects compiler-rt under clang/17; Xcode 26+ only ships clang/21.
-# Point the linker at the installed runtime until rustc is updated (rustup update stable).
+# Local fallback for Rust/Xcode clang_rt.ios mismatch (Xcode 26+ / clang 21).
+# CI overwrites this file by detecting the runner's clang darwin lib path.
+# Prefer `rustup update stable` when possible.
 [target.aarch64-apple-ios]
 rustflags = [
   "-C", "link-arg=-L/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/21.0.0/lib/darwin",

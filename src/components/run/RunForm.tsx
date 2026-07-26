@@ -1,13 +1,16 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { PlanDay, Run, RunType, DistanceUnit } from '../../types';
 import { RUN_TYPE_LABELS } from '../../types';
 import { Input, Textarea } from '../ui/Input';
 import { Select } from '../ui/Select';
 import { Button } from '../ui/Button';
+import { GearPicker } from '../gear/GearPicker';
 import { today, extractDate, dateToDatetime } from '../../utils/dateUtils';
 import { formatPace, calcPaceSeconds } from '../../utils/paceUtils';
 import { parseISO, format } from 'date-fns';
 import { useSettings } from '../../contexts/SettingsContext';
+import { useDb } from '../../contexts/DatabaseContext';
+import { getDefaultGearIds, getGearForRun } from '../../services/gearService';
 
 interface RunFormValues {
   date: string;
@@ -19,6 +22,8 @@ interface RunFormValues {
   seconds: string;
   run_type: RunType;
   notes: string;
+  avg_heart_rate: string;
+  max_heart_rate: string;
 }
 
 interface RunFormProps {
@@ -33,6 +38,9 @@ interface RunFormProps {
     run_type: RunType;
     plan_day_id?: string;
     notes: string;
+    avg_heart_rate?: number | null;
+    max_heart_rate?: number | null;
+    gear_ids: string[];
   }) => Promise<void>;
   isLoading?: boolean;
 }
@@ -50,19 +58,25 @@ function secsToHMS(total: number) {
   return { h: h.toString(), m: m.toString(), s: s.toString() };
 }
 
+function parseOptionalHr(value: string): number | null {
+  if (!value.trim()) return null;
+  const n = parseInt(value, 10);
+  if (isNaN(n) || n <= 0 || n > 250) return null;
+  return n;
+}
+
 export function RunForm({ initialDate, prefillPlanDay, existingRun, onSubmit, isLoading }: RunFormProps) {
   const { settings } = useSettings();
+  const db = useDb();
 
   const hms = existingRun ? secsToHMS(existingRun.duration_seconds) : null;
-  
-  // Extract date and time from existing run's datetime, or use defaults
-  let initialDateValue = existingRun?.date 
-    ? extractDate(existingRun.date) 
+
+  let initialDateValue = existingRun?.date
+    ? extractDate(existingRun.date)
     : (initialDate ?? today());
-  
+
   let initialTimeValue = '12:00';
   if (existingRun?.date && existingRun.date.includes('T')) {
-    // Extract time from datetime (format: HH:mm)
     try {
       const dt = parseISO(existingRun.date);
       initialTimeValue = format(dt, 'HH:mm');
@@ -70,7 +84,6 @@ export function RunForm({ initialDate, prefillPlanDay, existingRun, onSubmit, is
       initialTimeValue = '12:00';
     }
   } else {
-    // Default to current time for new runs
     initialTimeValue = format(new Date(), 'HH:mm');
   }
 
@@ -84,11 +97,25 @@ export function RunForm({ initialDate, prefillPlanDay, existingRun, onSubmit, is
     seconds: hms?.s ?? '',
     run_type: (existingRun?.run_type ?? prefillPlanDay?.activity_type as RunType | undefined) ?? 'easy_run',
     notes: existingRun?.notes ?? prefillPlanDay?.description ?? '',
+    avg_heart_rate: existingRun?.avg_heart_rate?.toString() ?? '',
+    max_heart_rate: existingRun?.max_heart_rate?.toString() ?? '',
   });
 
+  const [gearIds, setGearIds] = useState<string[]>([]);
   const [errors, setErrors] = useState<Partial<Record<keyof RunFormValues, string>>>({});
 
-  // Live pace
+  useEffect(() => {
+    if (!db) return;
+    (async () => {
+      if (existingRun) {
+        const assigned = await getGearForRun(db, existingRun.id);
+        setGearIds(assigned.map(g => g.id));
+      } else {
+        setGearIds(await getDefaultGearIds(db));
+      }
+    })();
+  }, [db, existingRun?.id]);
+
   const durationSeconds =
     parseInt(values.hours || '0') * 3600 +
     parseInt(values.minutes || '0') * 60 +
@@ -105,6 +132,12 @@ export function RunForm({ initialDate, prefillPlanDay, existingRun, onSubmit, is
     if (!values.date) e.date = 'Required';
     if (!values.distance_value || isNaN(dist) || dist <= 0) e.distance_value = 'Enter a positive distance';
     if (durationSeconds <= 0) e.minutes = 'Enter duration';
+    if (values.avg_heart_rate && parseOptionalHr(values.avg_heart_rate) == null) {
+      e.avg_heart_rate = 'Invalid HR';
+    }
+    if (values.max_heart_rate && parseOptionalHr(values.max_heart_rate) == null) {
+      e.max_heart_rate = 'Invalid HR';
+    }
     setErrors(e);
     return Object.keys(e).length === 0;
   }
@@ -112,10 +145,9 @@ export function RunForm({ initialDate, prefillPlanDay, existingRun, onSubmit, is
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!validate()) return;
-    
-    // Combine date and time into ISO 8601 datetime
+
     const datetime = dateToDatetime(values.date, `${values.time}:00Z`);
-    
+
     await onSubmit({
       date: datetime,
       distance_value: dist,
@@ -124,6 +156,9 @@ export function RunForm({ initialDate, prefillPlanDay, existingRun, onSubmit, is
       run_type: values.run_type as RunType,
       plan_day_id: prefillPlanDay?.id,
       notes: values.notes,
+      avg_heart_rate: parseOptionalHr(values.avg_heart_rate),
+      max_heart_rate: parseOptionalHr(values.max_heart_rate),
+      gear_ids: gearIds,
     });
   }
 
@@ -228,6 +263,35 @@ export function RunForm({ initialDate, prefillPlanDay, existingRun, onSubmit, is
         onChange={e => set('run_type', e.target.value)}
       />
 
+      <div className="flex gap-2">
+        <div className="flex-1">
+          <Input
+            label="Avg HR (optional)"
+            type="number"
+            min="1"
+            max="250"
+            placeholder="145"
+            value={values.avg_heart_rate}
+            onChange={e => set('avg_heart_rate', e.target.value)}
+            error={errors.avg_heart_rate}
+          />
+        </div>
+        <div className="flex-1">
+          <Input
+            label="Max HR (optional)"
+            type="number"
+            min="1"
+            max="250"
+            placeholder="175"
+            value={values.max_heart_rate}
+            onChange={e => set('max_heart_rate', e.target.value)}
+            error={errors.max_heart_rate}
+          />
+        </div>
+      </div>
+
+      <GearPicker selectedIds={gearIds} onChange={setGearIds} />
+
       <Textarea
         label="Notes (optional)"
         placeholder="How did it feel?"
@@ -242,4 +306,3 @@ export function RunForm({ initialDate, prefillPlanDay, existingRun, onSubmit, is
     </form>
   );
 }
-

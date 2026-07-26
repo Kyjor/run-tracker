@@ -21,6 +21,10 @@ struct LiveRunSnapshotJSON: Codable {
     var points: [LiveRoutePoint]
     var last_point: LiveRoutePoint?
     var permission_warning: String?
+    var current_heart_rate: Double?
+    var avg_heart_rate: Double?
+    var max_heart_rate: Double?
+    var min_heart_rate: Double?
 }
 
 typealias LiveRunUpdateCallback = @convention(c) (UnsafeMutablePointer<CChar>?) -> Void
@@ -33,7 +37,11 @@ private func idleSnapshot() -> LiveRunSnapshotJSON {
         distance_meters: 0,
         points: [],
         last_point: nil,
-        permission_warning: nil
+        permission_warning: nil,
+        current_heart_rate: nil,
+        avg_heart_rate: nil,
+        max_heart_rate: nil,
+        min_heart_rate: nil
     )
 }
 
@@ -58,6 +66,8 @@ final class LocationTrackingManager: NSObject, CLLocationManagerDelegate {
     private let sessionFileName = "active_live_run.json"
     private let minMovementMeters: Double = 3
     private let maxAccuracyMeters: Double = 50
+    private var hrSampleSum: Double = 0
+    private var hrSampleCount: Int = 0
 
     private override init() {
         super.init()
@@ -127,6 +137,8 @@ final class LocationTrackingManager: NSObject, CLLocationManagerDelegate {
         session = idleSnapshot()
         session.state = "running"
         session.started_at_ms = Date().timeIntervalSince1970 * 1000
+        hrSampleSum = 0
+        hrSampleCount = 0
         if permissionStatus() == "when_in_use" {
             session.permission_warning = "Background tracking may stop when the phone is locked. Enable Always location in Settings for reliable tracking."
         }
@@ -139,16 +151,53 @@ final class LocationTrackingManager: NSObject, CLLocationManagerDelegate {
             self.configureBackgroundUpdates()
             self.manager.startUpdatingLocation()
         }
+
+        // Start HealthKit live HR observer (no-op if unavailable)
+        LiveHeartRateMonitor.shared.start { [weak self] bpm in
+            self?.updateHeartRate(bpm)
+        }
+
         return 0
     }
 
+    /// Called by HealthKit / BLE bridges with a new BPM sample.
+    func updateHeartRate(_ bpm: Double) {
+        guard bpm > 0 && bpm < 250 else { return }
+        sessionLock.lock()
+        guard session.state == "running" else {
+            sessionLock.unlock()
+            return
+        }
+        session.current_heart_rate = bpm
+        hrSampleSum += bpm
+        hrSampleCount += 1
+        session.avg_heart_rate = hrSampleSum / Double(hrSampleCount)
+        if let existingMax = session.max_heart_rate {
+            session.max_heart_rate = Swift.max(existingMax, bpm)
+        } else {
+            session.max_heart_rate = bpm
+        }
+        if let existingMin = session.min_heart_rate {
+            session.min_heart_rate = Swift.min(existingMin, bpm)
+        } else {
+            session.min_heart_rate = bpm
+        }
+        sessionLock.unlock()
+        persistSession()
+        notifyUpdate()
+    }
+
     func stopLiveRun() -> LiveRunSnapshotJSON {
+        LiveHeartRateMonitor.shared.stop()
+        HRMBridgeManager.shared.stopScanning()
         manager.stopUpdatingLocation()
         sessionLock.lock()
         refreshElapsed()
         session.state = "idle"
         let snapshot = session
         session = idleSnapshot()
+        hrSampleSum = 0
+        hrSampleCount = 0
         sessionLock.unlock()
         deleteSessionFile()
         notifyUpdate()
@@ -156,9 +205,13 @@ final class LocationTrackingManager: NSObject, CLLocationManagerDelegate {
     }
 
     func cancelLiveRun() {
+        LiveHeartRateMonitor.shared.stop()
+        HRMBridgeManager.shared.stopScanning()
         manager.stopUpdatingLocation()
         sessionLock.lock()
         session = idleSnapshot()
+        hrSampleSum = 0
+        hrSampleCount = 0
         sessionLock.unlock()
         deleteSessionFile()
         notifyUpdate()
@@ -348,4 +401,10 @@ public func getLiveRunSnapshotNative(
 ) -> Int32 {
     let snapshot = LocationTrackingManager.shared.currentSnapshot()
     return writeJsonToResult(encodeLiveRunSnapshot(snapshot), resultPtr: resultPtr, resultLen: resultLen)
+}
+
+@_cdecl("update_live_run_heart_rate")
+public func updateLiveRunHeartRateNative(bpm: Double) -> Int32 {
+    LocationTrackingManager.shared.updateHeartRate(bpm)
+    return 0
 }

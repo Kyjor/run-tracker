@@ -9,7 +9,7 @@
 
 import type Database from '@tauri-apps/plugin-sql';
 import { supabase } from './supabaseClient';
-import type { Run, Goal, ActivePlan, TrainingPlan, PlanDay, SyncQueueItem } from '../types';
+import type { Run, Goal, ActivePlan, TrainingPlan, PlanDay, SyncQueueItem, Gear } from '../types';
 import { saveSettings } from './settingsService';
 import { getPlanById, getPlanDays } from './planService';
 
@@ -25,6 +25,7 @@ export async function syncToCloud(db: Database): Promise<void> {
   await pushDirtyGoals(db, session.user.id);
   await pushDirtyActivePlan(db, session.user.id);
   await pushDirtyCustomPlans(db, session.user.id);
+  await pushDirtyGear(db, session.user.id);
 
   await saveSettings(db, { last_sync_at: new Date().toISOString() });
 }
@@ -70,6 +71,7 @@ export async function forceSyncToCloud(db: Database): Promise<void> {
   await db.execute("UPDATE goals SET sync_status='local'");
   await db.execute("UPDATE active_plan SET sync_status='local'");
   await db.execute("UPDATE training_plans SET sync_status='local' WHERE is_builtin = 0");
+  await db.execute("UPDATE gear SET sync_status='local'");
   await syncToCloud(db);
 }
 
@@ -112,6 +114,20 @@ async function pushDirtyRuns(db: Database, userId: string): Promise<void> {
     if (error) {
       console.error('Failed to sync run', run.id, error.message);
     } else {
+      // Replace run_gear links for this run
+      await supabase.from('user_run_gear').delete().eq('user_id', userId).eq('run_id', run.id);
+      const gearLinks = await db.select<{ gear_id: string }[]>(
+        'SELECT gear_id FROM run_gear WHERE run_id = $1',
+        [run.id],
+      );
+      for (const link of gearLinks) {
+        await supabase.from('user_run_gear').upsert({
+          user_id: userId,
+          run_id: run.id,
+          gear_id: link.gear_id,
+        });
+      }
+
       // If this run has a GPS route, sync it to user_run_routes as well
       if (run.has_route) {
         try {
@@ -347,6 +363,60 @@ async function pushDirtyCustomPlans(db: Database, userId: string): Promise<void>
   }
 }
 
+async function pushDirtyGear(db: Database, userId: string): Promise<void> {
+  const dirty = await db.select<Gear[]>("SELECT * FROM gear WHERE sync_status != 'synced'");
+  for (const gear of dirty) {
+    const { error } = await supabase.from('user_gear').upsert({
+      id: gear.id,
+      user_id: userId,
+      type: gear.type,
+      name: gear.name,
+      brand: gear.brand,
+      model: gear.model,
+      purchase_date: gear.purchase_date,
+      notes: gear.notes,
+      is_active: gear.is_active === 1,
+      retired_at: gear.retired_at,
+      alert_threshold_mi: gear.alert_threshold_mi,
+      created_at: gear.created_at,
+      updated_at: gear.updated_at,
+    });
+    if (error) {
+      console.error('Failed to sync gear', gear.id, error.message);
+      continue;
+    }
+
+    // Sync run_gear links for this gear
+    const links = await db.select<{ run_id: string; gear_id: string }[]>(
+      'SELECT run_id, gear_id FROM run_gear WHERE gear_id = $1',
+      [gear.id],
+    );
+    for (const link of links) {
+      await supabase.from('user_run_gear').upsert({
+        user_id: userId,
+        run_id: link.run_id,
+        gear_id: link.gear_id,
+      });
+    }
+
+    await db.execute("UPDATE gear SET sync_status='synced' WHERE id=$1", [gear.id]);
+  }
+
+  // Also push run_gear for recently synced runs (in case gear was already synced)
+  const runLinks = await db.select<{ run_id: string; gear_id: string }[]>(
+    `SELECT rg.run_id, rg.gear_id FROM run_gear rg
+     INNER JOIN runs r ON r.id = rg.run_id
+     WHERE r.sync_status = 'synced'`,
+  );
+  for (const link of runLinks) {
+    await supabase.from('user_run_gear').upsert({
+      user_id: userId,
+      run_id: link.run_id,
+      gear_id: link.gear_id,
+    });
+  }
+}
+
 /** Pull remote data that doesn't exist locally (e.g. from another device) */
 export async function pullFromCloud(db: Database): Promise<void> {
   const { data: { session } } = await supabase.auth.getSession();
@@ -492,6 +562,48 @@ export async function pullFromCloud(db: Database): Promise<void> {
   } else {
     // No active plan in cloud, deactivate local ones
     await db.execute("UPDATE active_plan SET is_active = 0");
+  }
+
+  // Pull gear
+  const { data: remoteGear } = await supabase
+    .from('user_gear')
+    .select('*')
+    .eq('user_id', session.user.id);
+
+  if (remoteGear) {
+    for (const g of remoteGear) {
+      const existing = await db.select<Gear[]>('SELECT id FROM gear WHERE id=$1', [g.id]);
+      if (existing.length === 0) {
+        await db.execute(
+          `INSERT INTO gear
+            (id, type, name, brand, model, purchase_date, notes, is_active, retired_at,
+             alert_threshold_mi, created_at, updated_at, sync_status)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'synced')`,
+          [
+            g.id, g.type, g.name, g.brand, g.model, g.purchase_date, g.notes ?? '',
+            g.is_active ? 1 : 0, g.retired_at ?? null, g.alert_threshold_mi ?? null,
+            g.created_at, g.updated_at,
+          ],
+        );
+      }
+    }
+  }
+
+  const { data: remoteRunGear } = await supabase
+    .from('user_run_gear')
+    .select('*')
+    .eq('user_id', session.user.id);
+
+  if (remoteRunGear) {
+    for (const link of remoteRunGear) {
+      const runExists = await db.select<{ id: string }[]>('SELECT id FROM runs WHERE id=$1', [link.run_id]);
+      const gearExists = await db.select<{ id: string }[]>('SELECT id FROM gear WHERE id=$1', [link.gear_id]);
+      if (runExists.length === 0 || gearExists.length === 0) continue;
+      await db.execute(
+        'INSERT OR IGNORE INTO run_gear (run_id, gear_id) VALUES ($1, $2)',
+        [link.run_id, link.gear_id],
+      );
+    }
   }
 }
 

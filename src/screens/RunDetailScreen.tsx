@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import type { Run, RoutePoint } from '../types';
-import { RUN_TYPE_LABELS, ACTIVITY_COLORS } from '../types';
+import type { Gear, Run, RoutePoint } from '../types';
+import { GEAR_TYPE_LABELS, RUN_TYPE_LABELS, ACTIVITY_COLORS } from '../types';
 import { Header } from '../components/navigation/Header';
 import { Spinner } from '../components/ui/Spinner';
+import { Button } from '../components/ui/Button';
+import { Modal } from '../components/ui/Modal';
+import { GearPicker } from '../components/gear/GearPicker';
 import { RunMetricsDisplay } from '../components/run/RunMetricsDisplay';
 import { RunRouteMap } from '../components/run/RunRouteMap';
 import { RunSplitsSection } from '../components/run/RunSplitsSection';
@@ -12,6 +15,7 @@ import { useSettings } from '../contexts/SettingsContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { getRunById, getRouteForRun } from '../services/runService';
+import { assignGearToRun, getGearForRun } from '../services/gearService';
 import { mergeHealthKitMetricsIntoRun } from '../services/healthkitService';
 import { getRunByUserAndId, getProfileById, getRouteForFriendRun } from '../services/socialService';
 import { FadeIn } from '../components/motion/FadeIn';
@@ -36,6 +40,10 @@ export function RunDetailScreen() {
   const [routePoints, setRoutePoints] = useState<RoutePoint[] | null>(null);
   const [showDebug, setShowDebug] = useState(false);
   const [isMerging, setIsMerging] = useState(false);
+  const [runGear, setRunGear] = useState<Gear[]>([]);
+  const [gearEditOpen, setGearEditOpen] = useState(false);
+  const [editGearIds, setEditGearIds] = useState<string[]>([]);
+  const [savingGear, setSavingGear] = useState(false);
 
   async function reloadRun(runId: string) {
     const r = await getRunById(db, runId);
@@ -46,6 +54,8 @@ export function RunDetailScreen() {
     } else {
       setRoutePoints(null);
     }
+    const gear = await getGearForRun(db, runId);
+    setRunGear(gear);
   }
 
   useEffect(() => {
@@ -119,6 +129,24 @@ export function RunDetailScreen() {
       showToast('Failed to merge Apple Health metrics', 'error');
     } finally {
       setIsMerging(false);
+    }
+  }
+
+  function openGearEdit() {
+    setEditGearIds(runGear.map(g => g.id));
+    setGearEditOpen(true);
+  }
+
+  async function handleSaveGear() {
+    if (!db || !run) return;
+    setSavingGear(true);
+    try {
+      await assignGearToRun(db, run.id, editGearIds);
+      setRunGear(await getGearForRun(db, run.id));
+      setGearEditOpen(false);
+      showToast('Gear updated', 'success');
+    } finally {
+      setSavingGear(false);
     }
   }
 
@@ -243,6 +271,35 @@ export function RunDetailScreen() {
           <RunSplitsSection splits={splits} unit={settings.units} />
         )}
 
+        {!isFriendRun && (
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-4">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-sm font-semibold text-gray-900 dark:text-white">Gear</p>
+              <button
+                type="button"
+                className="text-xs text-primary-600 dark:text-primary-400 font-medium"
+                onClick={openGearEdit}
+              >
+                Edit
+              </button>
+            </div>
+            {runGear.length === 0 ? (
+              <p className="text-xs text-gray-400">No gear tagged</p>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {runGear.map(g => (
+                  <span
+                    key={g.id}
+                    className="text-xs px-2.5 py-1 rounded-xl bg-gray-50 dark:bg-gray-700 text-gray-700 dark:text-gray-200"
+                  >
+                    {GEAR_TYPE_LABELS[g.type]} · {g.name}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* ── Health metrics ───────────────────────────────────── */}
         {hasMetrics && (
           <RunMetricsDisplay run={run} useFahrenheit={settings.units === 'mi'} />
@@ -292,6 +349,15 @@ export function RunDetailScreen() {
           </div>
         )}
       </div>
+
+      <Modal isOpen={gearEditOpen} onClose={() => setGearEditOpen(false)} title="Edit Gear">
+        <div className="flex flex-col gap-4">
+          <GearPicker selectedIds={editGearIds} onChange={setEditGearIds} />
+          <Button className="w-full" onClick={handleSaveGear} isLoading={savingGear}>
+            Save
+          </Button>
+        </div>
+      </Modal>
     </div>
   );
 }

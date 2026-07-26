@@ -22,8 +22,10 @@ import { getActiveGoals, getGoalProgress } from '../services/goalService';
 import { getRunStats } from '../services/statsService';
 import { getFeed, toggleLike } from '../services/socialService';
 import { getCachedFeed, isFeedStale, setCachedFeed } from '../services/feedCache';
+import { getShoesNeedingAlert } from '../services/gearService';
+import type { Gear } from '../types';
 import { format, startOfWeek, endOfWeek } from 'date-fns';
-import { formatDistance } from '../utils/paceUtils';
+import { convertDistance, formatDistance } from '../utils/paceUtils';
 
 const FEED_PAGE_SIZE = 5;
 
@@ -37,6 +39,7 @@ export function DashboardScreen() {
   const [lastRun, setLastRun] = useState<Run | null>(null);
   const [goalProgress, setGoalProgress] = useState<GoalProgress[]>([]);
   const [weekStats, setWeekStats] = useState<RunStats | null>(null);
+  const [shoeAlerts, setShoeAlerts] = useState<Array<Gear & { total_distance_mi: number }>>([]);
   const [dataLoading, setDataLoading] = useState(true);
 
   // Friends feed — initialise from cache for instant display
@@ -62,6 +65,7 @@ export function DashboardScreen() {
 
       const progressArr = await Promise.all(goals.map(g => getGoalProgress(db, g)));
       setGoalProgress(progressArr);
+      setShoeAlerts(await getShoesNeedingAlert(db));
       setDataLoading(false);
     }
     load();
@@ -131,9 +135,9 @@ export function DashboardScreen() {
 
     const progressArr = await Promise.all(goals.map(g => getGoalProgress(db, g)));
     setGoalProgress(progressArr);
+    setShoeAlerts(await getShoesNeedingAlert(db));
     setDataLoading(false);
 
-    // Also refresh feed if user is logged in
     if (user) {
       await refreshFeed();
     }
@@ -160,6 +164,22 @@ export function DashboardScreen() {
 
       <PullToRefresh onRefresh={handleRefresh}>
         <div className="px-4 pt-4 pb-24 flex flex-col gap-section">
+
+        {shoeAlerts.length > 0 && (
+          <Card className="border border-amber-200/80 dark:border-amber-800 bg-amber-50/80 dark:bg-amber-900/20">
+            <button type="button" className="w-full text-left" onClick={() => navigate('/profile/gear')}>
+              <p className="text-sm font-semibold text-ink-primary dark:text-ink-dark-primary">
+                Shoe mileage alert
+              </p>
+              <p className="text-xs text-ink-secondary dark:text-ink-dark-secondary mt-0.5">
+                {shoeAlerts.map(s => {
+                  const dist = convertDistance(s.total_distance_mi, 'mi', settings.units);
+                  return `${s.name} · ${formatDistance(dist, settings.units)}`;
+                }).join(' · ')}
+              </p>
+            </button>
+          </Card>
+        )}
 
         {/* Today + This Week combined */}
         <div>

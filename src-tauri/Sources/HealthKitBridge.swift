@@ -597,3 +597,67 @@ private func activityTypeName(_ type: HKWorkoutActivityType) -> String {
     default:        return "other"
     }
 }
+
+// ---------------------------------------------------------------------------
+// Live heart-rate monitoring (reads samples from HealthKit during a live run)
+// ---------------------------------------------------------------------------
+
+final class LiveHeartRateMonitor {
+    static let shared = LiveHeartRateMonitor()
+
+    private var query: HKAnchoredObjectQuery?
+    private var onSample: ((Double) -> Void)?
+    private let lock = NSLock()
+
+    private init() {}
+
+    func start(onSample: @escaping (Double) -> Void) {
+        guard HKHealthStore.isHealthDataAvailable(),
+              let hrType = HKObjectType.quantityType(forIdentifier: .heartRate) else {
+            return
+        }
+
+        stop()
+        lock.lock()
+        self.onSample = onSample
+        lock.unlock()
+
+        let startDate = Date().addingTimeInterval(-30)
+        let predicate = HKQuery.predicateForSamples(withStart: startDate, end: nil, options: .strictStartDate)
+
+        let query = HKAnchoredObjectQuery(
+            type: hrType,
+            predicate: predicate,
+            anchor: nil,
+            limit: HKObjectQueryNoLimit
+        ) { [weak self] _, samples, _, _, _ in
+            self?.handleSamples(samples)
+        }
+        query.updateHandler = { [weak self] _, samples, _, _, _ in
+            self?.handleSamples(samples)
+        }
+
+        self.query = query
+        healthStore.execute(query)
+    }
+
+    func stop() {
+        if let query {
+            healthStore.stop(query)
+        }
+        query = nil
+        lock.lock()
+        onSample = nil
+        lock.unlock()
+    }
+
+    private func handleSamples(_ samples: [HKSample]?) {
+        guard let quantities = samples as? [HKQuantitySample],
+              let last = quantities.last else { return }
+        let bpm = last.quantity.doubleValue(for: HKUnit.count().unitDivided(by: .minute()))
+        lock.lock()
+        let callback = onSample
+        lock.unlock()
+        callback?(bpm)
+    }
+}
