@@ -54,16 +54,16 @@ jobs:
           fi
           echo "Using clang darwin libs at: $CLANG_LIB"
           mkdir -p src-tauri/.cargo
-          cat > src-tauri/.cargo/config.toml <<EOF
-[target.aarch64-apple-ios]
-rustflags = ["-C", "link-arg=-L${CLANG_LIB}"]
-
-[target.aarch64-apple-ios-sim]
-rustflags = ["-C", "link-arg=-L${CLANG_LIB}"]
-
-[target.x86_64-apple-ios]
-rustflags = ["-C", "link-arg=-L${CLANG_LIB}"]
-EOF
+          {
+            echo "[target.aarch64-apple-ios]"
+            echo "rustflags = [\"-C\", \"link-arg=-L${CLANG_LIB}\"]"
+            echo
+            echo "[target.aarch64-apple-ios-sim]"
+            echo "rustflags = [\"-C\", \"link-arg=-L${CLANG_LIB}\"]"
+            echo
+            echo "[target.x86_64-apple-ios]"
+            echo "rustflags = [\"-C\", \"link-arg=-L${CLANG_LIB}\"]"
+          } > src-tauri/.cargo/config.toml
 
       - name: Install Apple Certificate
         uses: apple-actions/import-codesign-certs@v3
@@ -86,10 +86,10 @@ EOF
 
       - name: Create .env
         run: |
-          cat > .env <<EOF
-VITE_SUPABASE_URL=${{ secrets.VITE_SUPABASE_URL }}
-VITE_SUPABASE_ANON_KEY=${{ secrets.VITE_SUPABASE_ANON_KEY }}
-EOF
+          {
+            echo "VITE_SUPABASE_URL=${{ secrets.VITE_SUPABASE_URL }}"
+            echo "VITE_SUPABASE_ANON_KEY=${{ secrets.VITE_SUPABASE_ANON_KEY }}"
+          } > .env
 
       - name: Set build number
         run: |
