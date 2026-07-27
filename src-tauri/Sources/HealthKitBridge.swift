@@ -42,6 +42,25 @@ struct WorkoutDetailsJSON: Codable {
     var route_points: String?  // JSON string
 }
 
+/// Thread-safe box so concurrent HealthKit callbacks can update details
+/// without capturing a mutable struct (Swift concurrency error on CI).
+private final class WorkoutDetailsBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var details = WorkoutDetailsJSON()
+
+    func mutate(_ body: (inout WorkoutDetailsJSON) -> Void) {
+        lock.lock()
+        defer { lock.unlock() }
+        body(&details)
+    }
+
+    func snapshot() -> WorkoutDetailsJSON {
+        lock.lock()
+        defer { lock.unlock() }
+        return details
+    }
+}
+
 struct RoutePoint: Codable {
     let lat: Double
     let lng: Double
@@ -257,7 +276,7 @@ public func fetchWorkoutDetails(
     print("[HealthKit] [details] Found workout id=\(workoutId) duration=\(workout.duration)s distance_m=\(distMeters) fetchTime=\(elapsedFetch)s")
 
     let semaphore = DispatchSemaphore(value: 0)
-    var details = WorkoutDetailsJSON()
+    let details = WorkoutDetailsBox()
     let group = DispatchGroup()
 
     // ── Heart Rate (full samples for zones + min) ─────────────────────────
@@ -268,25 +287,28 @@ public func fetchWorkoutDetails(
         print("[HealthKit] [details] HR samples callback for id=\(workoutId) count=\(samples.count) elapsed=\(Date().timeIntervalSince(hrStart))s")
         if !samples.isEmpty {
             let values = samples.map { $0.quantity.doubleValue(for: HKUnit(from: "count/min")) }
-            details.min_heart_rate = values.min()
-            // Compute average / max HR from samples
             let avg = values.reduce(0, +) / Double(values.count)
-            details.average_heart_rate = avg
-            details.max_heart_rate = values.max()
             let effectiveMax = maxHR > 0 ? maxHR : (values.max() ?? 190)
-            details.hr_zone_1_seconds = 0; details.hr_zone_2_seconds = 0
-            details.hr_zone_3_seconds = 0; details.hr_zone_4_seconds = 0
-            details.hr_zone_5_seconds = 0
-            // Approximate time per sample = total_duration / sample_count
             let secondsPerSample = workout.duration / Double(samples.count)
+            var z1 = 0.0, z2 = 0.0, z3 = 0.0, z4 = 0.0, z5 = 0.0
             for sample in samples {
                 let bpm = sample.quantity.doubleValue(for: HKUnit(from: "count/min"))
                 let pct = bpm / effectiveMax
-                if      pct < 0.60 { details.hr_zone_1_seconds! += secondsPerSample }
-                else if pct < 0.70 { details.hr_zone_2_seconds! += secondsPerSample }
-                else if pct < 0.80 { details.hr_zone_3_seconds! += secondsPerSample }
-                else if pct < 0.90 { details.hr_zone_4_seconds! += secondsPerSample }
-                else               { details.hr_zone_5_seconds! += secondsPerSample }
+                if      pct < 0.60 { z1 += secondsPerSample }
+                else if pct < 0.70 { z2 += secondsPerSample }
+                else if pct < 0.80 { z3 += secondsPerSample }
+                else if pct < 0.90 { z4 += secondsPerSample }
+                else               { z5 += secondsPerSample }
+            }
+            details.mutate { d in
+                d.min_heart_rate = values.min()
+                d.average_heart_rate = avg
+                d.max_heart_rate = values.max()
+                d.hr_zone_1_seconds = z1
+                d.hr_zone_2_seconds = z2
+                d.hr_zone_3_seconds = z3
+                d.hr_zone_4_seconds = z4
+                d.hr_zone_5_seconds = z5
             }
         }
         group.leave()
@@ -298,7 +320,8 @@ public func fetchWorkoutDetails(
     print("[HealthKit] [details] Cadence stats query starting for id=\(workoutId)")
     fetchStatistic(workout: workout, type: .stepCount, options: .cumulativeSum) { stats in
         if let total = stats?.sumQuantity()?.doubleValue(for: .count()) {
-            details.average_cadence = total / (workout.duration / 60.0)
+            let cadence = total / (workout.duration / 60.0)
+            details.mutate { $0.average_cadence = cadence }
             print("[HealthKit] [details] Cadence stats complete for id=\(workoutId) totalSteps=\(total) elapsed=\(Date().timeIntervalSince(cadenceStart))s")
         } else {
             print("[HealthKit] [details] Cadence stats missing for id=\(workoutId) elapsed=\(Date().timeIntervalSince(cadenceStart))s")
@@ -312,8 +335,9 @@ public func fetchWorkoutDetails(
         let strideStart = Date()
         print("[HealthKit] [details] Stride length stats query starting for id=\(workoutId)")
         fetchStatistic(workout: workout, type: .runningStrideLength, options: .discreteAverage) { stats in
-            details.average_stride_length_meters = stats?.averageQuantity()?.doubleValue(for: .meter())
-            print("[HealthKit] [details] Stride length stats complete for id=\(workoutId) value=\(details.average_stride_length_meters ?? -1) elapsed=\(Date().timeIntervalSince(strideStart))s")
+            let value = stats?.averageQuantity()?.doubleValue(for: .meter())
+            details.mutate { $0.average_stride_length_meters = value }
+            print("[HealthKit] [details] Stride length stats complete for id=\(workoutId) value=\(value ?? -1) elapsed=\(Date().timeIntervalSince(strideStart))s")
             group.leave()
         }
 
@@ -323,8 +347,9 @@ public func fetchWorkoutDetails(
         fetchStatistic(workout: workout, type: .runningGroundContactTime, options: .discreteAverage) { stats in
             // HealthKit stores GCT in seconds; convert to ms
             if let secs = stats?.averageQuantity()?.doubleValue(for: .second()) {
-                details.average_ground_contact_time_ms = secs * 1000
-                print("[HealthKit] [details] GCT stats complete for id=\(workoutId) value_ms=\(details.average_ground_contact_time_ms ?? -1) elapsed=\(Date().timeIntervalSince(gctStart))s")
+                let ms = secs * 1000
+                details.mutate { $0.average_ground_contact_time_ms = ms }
+                print("[HealthKit] [details] GCT stats complete for id=\(workoutId) value_ms=\(ms) elapsed=\(Date().timeIntervalSince(gctStart))s")
             } else {
                 print("[HealthKit] [details] GCT stats missing for id=\(workoutId) elapsed=\(Date().timeIntervalSince(gctStart))s")
             }
@@ -337,8 +362,9 @@ public func fetchWorkoutDetails(
         fetchStatistic(workout: workout, type: .runningVerticalOscillation, options: .discreteAverage) { stats in
             // HealthKit stores in metres; convert to cm
             if let metres = stats?.averageQuantity()?.doubleValue(for: .meter()) {
-                details.average_vertical_oscillation_cm = metres * 100
-                print("[HealthKit] [details] VO stats complete for id=\(workoutId) value_cm=\(details.average_vertical_oscillation_cm ?? -1) elapsed=\(Date().timeIntervalSince(voStart))s")
+                let cm = metres * 100
+                details.mutate { $0.average_vertical_oscillation_cm = cm }
+                print("[HealthKit] [details] VO stats complete for id=\(workoutId) value_cm=\(cm) elapsed=\(Date().timeIntervalSince(voStart))s")
             } else {
                 print("[HealthKit] [details] VO stats missing for id=\(workoutId) elapsed=\(Date().timeIntervalSince(voStart))s")
             }
@@ -349,9 +375,13 @@ public func fetchWorkoutDetails(
         let powerStart = Date()
         print("[HealthKit] [details] Running power stats query starting for id=\(workoutId)")
         fetchStatistic(workout: workout, type: .runningPower, options: [.discreteAverage, .discreteMax]) { stats in
-            details.average_power_watts = stats?.averageQuantity()?.doubleValue(for: HKUnit.watt())
-            details.max_power_watts = stats?.maximumQuantity()?.doubleValue(for: HKUnit.watt())
-            print("[HealthKit] [details] Power stats complete for id=\(workoutId) avg=\(details.average_power_watts ?? -1) max=\(details.max_power_watts ?? -1) elapsed=\(Date().timeIntervalSince(powerStart))s")
+            let avg = stats?.averageQuantity()?.doubleValue(for: HKUnit.watt())
+            let max = stats?.maximumQuantity()?.doubleValue(for: HKUnit.watt())
+            details.mutate {
+                $0.average_power_watts = avg
+                $0.max_power_watts = max
+            }
+            print("[HealthKit] [details] Power stats complete for id=\(workoutId) avg=\(avg ?? -1) max=\(max ?? -1) elapsed=\(Date().timeIntervalSince(powerStart))s")
             group.leave()
         }
     }
@@ -361,7 +391,7 @@ public func fetchWorkoutDetails(
     let vo2Start = Date()
     print("[HealthKit] [details] VO2 max query starting for id=\(workoutId)")
     fetchLatestVO2Max { v in
-        details.vo2_max = v
+        details.mutate { $0.vo2_max = v }
         print("[HealthKit] [details] VO2 max query complete for id=\(workoutId) value=\(v ?? -1) elapsed=\(Date().timeIntervalSince(vo2Start))s")
         group.leave()
     }
@@ -371,13 +401,18 @@ public func fetchWorkoutDetails(
     let routeStart = Date()
     print("[HealthKit] [details] Route query starting for id=\(workoutId)")
     fetchRoute(workout: workout) { points, gain, loss in
-        details.elevation_gain_meters = gain
-        details.elevation_loss_meters = loss
+        var routeJSON: String?
+        if let pts = points, !pts.isEmpty,
+           let json = try? JSONEncoder().encode(pts),
+           let str = String(data: json, encoding: .utf8) {
+            routeJSON = str
+        }
+        details.mutate {
+            $0.elevation_gain_meters = gain
+            $0.elevation_loss_meters = loss
+            $0.route_points = routeJSON
+        }
         if let pts = points, !pts.isEmpty {
-            if let json = try? JSONEncoder().encode(pts),
-               let str = String(data: json, encoding: .utf8) {
-                details.route_points = str
-            }
             print("[HealthKit] [details] Route query complete for id=\(workoutId) points=\(pts.count) gain=\(gain ?? -1) loss=\(loss ?? -1) elapsed=\(Date().timeIntervalSince(routeStart))s")
         } else {
             print("[HealthKit] [details] Route query returned no points for id=\(workoutId) gain=\(gain ?? -1) loss=\(loss ?? -1) elapsed=\(Date().timeIntervalSince(routeStart))s")
@@ -392,7 +427,7 @@ public func fetchWorkoutDetails(
     print("[HealthKit] [details] All detail sub-queries completed for id=\(workoutId) in \(groupElapsed)s, encoding JSON…")
 
     do {
-        let json = try JSONEncoder().encode(details)
+        let json = try JSONEncoder().encode(details.snapshot())
         let str = String(data: json, encoding: .utf8)!
         resultPtr?.pointee = strdup(str)
         resultLen?.pointee = str.utf8.count
