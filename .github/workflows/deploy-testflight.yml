@@ -14,11 +14,22 @@ concurrency:
 jobs:
   build-and-deploy:
     name: Build iOS & Upload to TestFlight
-    runs-on: macos-14
+    # App Store Connect requires iOS 26 SDK (Xcode 26+); macos-14 only has Xcode 15.x.
+    runs-on: macos-26
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Select Xcode 26
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '26'
+
+      - name: Show Xcode / SDK
+        run: |
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
 
       - name: Set up Node
         uses: actions/setup-node@v4
@@ -43,8 +54,7 @@ jobs:
         with:
           workspaces: src-tauri
 
-      # Point Rust at whatever clang_rt.ios the runner's Xcode ships (local machines
-      # may have clang/21; GitHub runners often have an older version).
+      # Point Rust at whatever clang_rt.ios the selected Xcode ships.
       - name: Configure Rust iOS linker paths
         run: |
           CLANG_LIB="$(ls -d "$(xcode-select -p)/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/"*/lib/darwin 2>/dev/null | sort -V | tail -1)"
