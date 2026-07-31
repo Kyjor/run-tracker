@@ -42,8 +42,8 @@ import { RunDetailScreen } from './screens/RunDetailScreen';
 import { LogEntryScreen } from './screens/LogEntryScreen';
 import { LiveRunScreen } from './screens/LiveRunScreen';
 import { FitImportScreen } from './screens/FitImportScreen';
-import { NutritionScreen } from './screens/NutritionScreen';
 import { AchievementsScreen } from './components/achievements/AchievementsScreen';
+import { PersonalBestsScreen } from './screens/PersonalBestsScreen';
 import { ActiveRunBanner } from './components/run/ActiveRunBanner';
 import type { PendingFitFilePayload } from './services/fitImportService';
 
@@ -72,11 +72,17 @@ function AppShell() {
     });
   }, [isLoaded, settings.daily_reminder_enabled]);
 
-  // Auto-sync on startup when logged in
+  // Push deletes/upserts first, then pull — avoids resurrecting deleted records
   useEffect(() => {
     if (!isReady || !db || !user) return;
-    pullFromCloud(db).catch(() => {});
-    syncToCloud(db).catch(() => {});
+    (async () => {
+      try {
+        await syncToCloud(db);
+        await pullFromCloud(db);
+      } catch {
+        // offline / transient — next launch or manual sync will retry
+      }
+    })();
   }, [isReady, db, user]);
 
   useEffect(() => {
@@ -175,8 +181,8 @@ function AppShell() {
           <Route path="/profile/plans/:id" element={<PlanDetailScreen />} />
           <Route path="/profile/goals" element={<GoalsScreen />} />
           <Route path="/profile/gear" element={<GearScreen />} />
-          <Route path="/profile/nutrition" element={<NutritionScreen />} />
           <Route path="/profile/achievements" element={<AchievementsScreen />} />
+          <Route path="/profile/personal-bests" element={<PersonalBestsScreen />} />
           <Route path="/settings" element={<SettingsScreen />} />
 
           {/* Social */}

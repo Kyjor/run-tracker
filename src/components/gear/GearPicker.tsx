@@ -4,6 +4,8 @@ import { GEAR_TYPE_LABELS } from '../../types';
 import { useDb } from '../../contexts/DatabaseContext';
 import { getAllGear } from '../../services/gearService';
 
+const HIDDEN_TYPES = new Set<GearType>(['bike']);
+
 interface GearPickerProps {
   selectedIds: string[];
   onChange: (ids: string[]) => void;
@@ -18,10 +20,16 @@ export function GearPicker({ selectedIds, onChange, types, label = 'Gear' }: Gea
 
   useEffect(() => {
     if (!db) return;
-    getAllGear(db, true).then(items => {
-      setGear(types ? items.filter(g => types.includes(g.type)) : items);
+    getAllGear(db, false).then(items => {
+      const visible = items.filter(g => {
+        if (HIDDEN_TYPES.has(g.type)) return false;
+        if (types && !types.includes(g.type)) return false;
+        // Show active gear, plus any retired items still selected on this run
+        return g.is_active === 1 || selectedIds.includes(g.id);
+      });
+      setGear(visible);
     });
-  }, [db, types]);
+  }, [db, types, selectedIds]);
 
   if (gear.length === 0) return null;
 
@@ -50,6 +58,7 @@ export function GearPicker({ selectedIds, onChange, types, label = 'Gear' }: Gea
             <div className="flex flex-wrap gap-2">
               {items.map(g => {
                 const selected = selectedIds.includes(g.id);
+                const retired = g.is_active !== 1;
                 return (
                   <button
                     key={g.id}
@@ -60,9 +69,10 @@ export function GearPicker({ selectedIds, onChange, types, label = 'Gear' }: Gea
                       selected
                         ? 'bg-primary-500 text-white border-primary-500'
                         : 'bg-surface dark:bg-surface-dark-elevated text-ink-primary dark:text-ink-dark-primary border-border dark:border-border-dark',
+                      retired ? 'opacity-70' : '',
                     ].join(' ')}
                   >
-                    {g.name}
+                    {g.name}{retired ? ' (retired)' : ''}
                   </button>
                 );
               })}

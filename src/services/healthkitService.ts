@@ -188,38 +188,6 @@ export interface HealthKitBodyFatSample {
   body_fat_percent: number;
 }
 
-/**
- * Optional helper used by NutritionScreen.
- * Returns null when the native command is unavailable.
- */
-export async function fetchTodayWeight(date: string): Promise<HealthKitWeightSample | null> {
-  try {
-    return await invoke<HealthKitWeightSample>('fetch_today_weight', { date });
-  } catch (error) {
-    appendHealthKitDebug(
-      'info',
-      `fetch_today_weight unavailable or failed: ${error instanceof Error ? error.message : String(error)}`,
-    );
-    return null;
-  }
-}
-
-/**
- * Optional helper used by NutritionScreen.
- * Returns null when the native command is unavailable.
- */
-export async function fetchTodayBodyFat(date: string): Promise<HealthKitBodyFatSample | null> {
-  try {
-    return await invoke<HealthKitBodyFatSample>('fetch_today_body_fat', { date });
-  } catch (error) {
-    appendHealthKitDebug(
-      'info',
-      `fetch_today_body_fat unavailable or failed: ${error instanceof Error ? error.message : String(error)}`,
-    );
-    return null;
-  }
-}
-
 // ---------------------------------------------------------------------------
 // Duplicate detection
 // ---------------------------------------------------------------------------

@@ -16,6 +16,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { getRunById, getRouteForRun } from '../services/runService';
 import { assignGearToRun, getGearForRun } from '../services/gearService';
+import { syncToCloud } from '../services/syncService';
 import { mergeHealthKitMetricsIntoRun } from '../services/healthkitService';
 import { getRunByUserAndId, getProfileById, getRouteForFriendRun } from '../services/socialService';
 import { FadeIn } from '../components/motion/FadeIn';
@@ -145,6 +146,7 @@ export function RunDetailScreen() {
       setRunGear(await getGearForRun(db, run.id));
       setGearEditOpen(false);
       showToast('Gear updated', 'success');
+      if (user) syncToCloud(db).catch(() => {});
     } finally {
       setSavingGear(false);
     }

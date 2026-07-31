@@ -12,7 +12,7 @@ import { useDb } from '../contexts/DatabaseContext';
 import { usePlan } from '../contexts/PlanContext';
 import { useToast } from '../contexts/ToastContext';
 import { useSettings } from '../contexts/SettingsContext';
-import { getPlanById, getPlanDays, setActivePlan, exportPlanToFormat, deletePlan } from '../services/planService';
+import { getPlanById, getPlanDays, setActivePlan, clearActivePlan, exportPlanToFormat, deletePlan } from '../services/planService';
 import { ConfirmModal } from '../components/ui/Modal';
 import { WorkoutDisplay, EstimatedTimeBadge } from '../components/workout/WorkoutDisplay';
 import { formatDistance } from '../utils/paceUtils';
@@ -42,6 +42,8 @@ export function PlanDetailScreen() {
   const [activating, setActivating] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [deleteModal, setDeleteModal] = useState(false);
+  const [exitModal, setExitModal] = useState(false);
+  const [exiting, setExiting] = useState(false);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -75,6 +77,18 @@ export function PlanDetailScreen() {
     a.click();
     URL.revokeObjectURL(url);
     showToast('Plan exported!', 'success');
+  }
+
+  async function handleExitPlan() {
+    setExiting(true);
+    try {
+      await clearActivePlan(db);
+      await refresh();
+      showToast('Plan ended. You can start another anytime.', 'info');
+      setExitModal(false);
+    } finally {
+      setExiting(false);
+    }
   }
 
   async function handleDelete() {
@@ -113,11 +127,16 @@ export function PlanDetailScreen() {
 
         {/* Activate */}
         {isActive ? (
-          <div className="flex items-center gap-2 bg-primary-50 dark:bg-primary-900/20 rounded-2xl p-4">
-            <span className="text-primary-600 dark:text-primary-400 font-semibold text-sm">✓ Currently Active</span>
-            <span className="text-xs text-gray-400 ml-auto">
-              Started {activePlan!.start_date}
-            </span>
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center gap-2 bg-primary-50 dark:bg-primary-900/20 rounded-2xl p-4">
+              <span className="text-primary-600 dark:text-primary-400 font-semibold text-sm">✓ Currently Active</span>
+              <span className="text-xs text-gray-400 ml-auto">
+                Started {activePlan!.start_date}
+              </span>
+            </div>
+            <Button variant="secondary" className="w-full" onClick={() => setExitModal(true)}>
+              End Plan Early
+            </Button>
           </div>
         ) : (
           <>
@@ -219,6 +238,16 @@ export function PlanDetailScreen() {
           </Button>
         )}
       </div>
+
+      <ConfirmModal
+        isOpen={exitModal}
+        onClose={() => setExitModal(false)}
+        onConfirm={handleExitPlan}
+        title="End Plan Early?"
+        message="This stops the active plan. Your logged runs stay. You can activate this or another plan later."
+        confirmLabel={exiting ? 'Ending…' : 'End Plan'}
+        confirmVariant="danger"
+      />
 
       <ConfirmModal
         isOpen={deleteModal}

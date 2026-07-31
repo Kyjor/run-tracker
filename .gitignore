@@ -90,4 +90,7 @@ typings/
 
 gen/apple/
 
+# CocoaPods (keep Podfile + Podfile.lock; regenerate Pods locally/CI)
+src-tauri/gen/apple/Pods/
+
 .DS_Store

@@ -1,7 +1,6 @@
 import type Database from '@tauri-apps/plugin-sql';
 import type { Run, RunType, DistanceUnit, RoutePoint } from '../types';
 import { generateId } from '../utils/generateId';
-import { supabase } from './supabaseClient';
 import { dateToDatetime } from '../utils/dateUtils';
 
 // ---------------------------------------------------------------------------
@@ -218,44 +217,19 @@ export async function updateRun(
 // ---------------------------------------------------------------------------
 
 export async function deleteRun(db: Database, id: string): Promise<void> {
-  // Check if run is synced to Supabase before deleting locally
   const runs = await db.select<Run[]>('SELECT sync_status FROM runs WHERE id = $1', [id]);
   const run = runs[0];
-  
-  // If run is synced, try to delete from Supabase first
-  if (run && run.sync_status === 'synced') {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session) {
-      const { error } = await supabase
-        .from('user_runs')
-        .delete()
-        .eq('id', id)
-        .eq('user_id', session.user.id);
-      
-      if (error) {
-        // If delete fails (e.g., offline), queue it for later sync
-        console.warn('Failed to delete run from Supabase, queueing for later:', error);
-        const queueId = generateId();
-        const now = new Date().toISOString();
-        await db.execute(
-          `INSERT INTO sync_queue (id, table_name, record_id, action, payload, created_at)
-           VALUES ($1, $2, $3, $4, $5, $6)`,
-          [queueId, 'user_runs', id, 'delete', JSON.stringify({ id }), now]
-        );
-      }
-    } else {
-      // Not authenticated, queue the delete
-      const queueId = generateId();
-      const now = new Date().toISOString();
-      await db.execute(
-        `INSERT INTO sync_queue (id, table_name, record_id, action, payload, created_at)
-         VALUES ($1, $2, $3, $4, $5, $6)`,
-        [queueId, 'user_runs', id, 'delete', JSON.stringify({ id }), now]
-      );
-    }
+
+  // Cloud may have the row if it was synced or edited after sync (dirty)
+  if (run && (run.sync_status === 'synced' || run.sync_status === 'dirty')) {
+    const { deleteFromCloudOrQueue } = await import('./syncService');
+    await deleteFromCloudOrQueue(db, 'user_runs', id, async (userId) => {
+      const { supabase } = await import('./supabaseClient');
+      await supabase.from('user_run_gear').delete().eq('user_id', userId).eq('run_id', id);
+      await supabase.from('user_run_routes').delete().eq('user_id', userId).eq('run_id', id);
+    });
   }
-  
-  // Delete locally (always delete locally, even if cloud delete failed)
+
   await db.execute('DELETE FROM runs WHERE id = $1', [id]);
 }
 

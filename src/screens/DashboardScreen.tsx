@@ -24,6 +24,7 @@ import { getFeed, toggleLike } from '../services/socialService';
 import { getCachedFeed, isFeedStale, setCachedFeed } from '../services/feedCache';
 import { getShoesNeedingAlert } from '../services/gearService';
 import type { Gear } from '../types';
+import { HomeAdBanner } from '../components/ads/HomeAdBanner';
 import { format, startOfWeek, endOfWeek } from 'date-fns';
 import { convertDistance, formatDistance } from '../utils/paceUtils';
 
@@ -163,7 +164,7 @@ export function DashboardScreen() {
       />
 
       <PullToRefresh onRefresh={handleRefresh}>
-        <div className="px-4 pt-4 pb-24 flex flex-col gap-section">
+        <div className="px-4 pt-4 pb-36 flex flex-col gap-section">
 
         {shoeAlerts.length > 0 && (
           <Card className="border border-amber-200/80 dark:border-amber-800 bg-amber-50/80 dark:bg-amber-900/20">
@@ -330,6 +331,11 @@ export function DashboardScreen() {
 
         </div>
       </PullToRefresh>
+
+      {/* Reserves space above the tab bar; native AdMob overlays this on iOS */}
+      <div className="fixed bottom-[calc(3.5rem+env(safe-area-inset-bottom,0px))] left-0 right-0 z-30 px-0">
+        <HomeAdBanner />
+      </div>
     </div>
   );
 }

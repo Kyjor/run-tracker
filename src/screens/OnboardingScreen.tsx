@@ -98,7 +98,7 @@ export function OnboardingScreen() {
           <div className="flex flex-col items-center justify-center flex-1 text-center">
             <div className="text-7xl mb-6">🏃‍♂️</div>
             <h1 className="text-4xl font-bold text-gray-900 dark:text-white mb-3">
-              Run With Friends
+              Run 4 Fun
             </h1>
             <p className="text-gray-500 dark:text-gray-400 text-lg mb-12 max-w-xs">
               Train smarter, run farther, and bring your friends along.

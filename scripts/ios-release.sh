@@ -67,6 +67,13 @@ run_build() {
     echo "Note: Rust 1.87 needs clang/17 or an update. Run: bash scripts/fix-xcode-clang-rt.sh"
   fi
   cd "$ROOT_DIR"
+  if [[ -f "$ROOT_DIR/src-tauri/gen/apple/Podfile" ]]; then
+    echo "Installing CocoaPods dependencies..."
+    (
+      cd "$ROOT_DIR/src-tauri/gen/apple"
+      pod install
+    )
+  fi
   npx tauri ios build --export-method app-store-connect
 }
 

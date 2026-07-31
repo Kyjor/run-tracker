@@ -31,6 +31,12 @@ export async function createGoal(
 }
 
 export async function deleteGoal(db: Database, id: string): Promise<void> {
+  const rows = await db.select<Goal[]>('SELECT sync_status FROM goals WHERE id = $1', [id]);
+  const goal = rows[0];
+  if (goal && goal.sync_status !== 'local') {
+    const { deleteFromCloudOrQueue } = await import('./syncService');
+    await deleteFromCloudOrQueue(db, 'user_goals', id);
+  }
   await db.execute('DELETE FROM goals WHERE id = $1', [id]);
 }
 

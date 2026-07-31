@@ -173,6 +173,7 @@ const MIGRATIONS = [
     is_active INTEGER NOT NULL DEFAULT 1,
     retired_at TEXT,
     alert_threshold_mi REAL,
+    starting_distance_mi REAL NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     sync_status TEXT NOT NULL DEFAULT 'local'
@@ -188,6 +189,9 @@ const MIGRATIONS = [
   )`,
   `CREATE INDEX IF NOT EXISTS idx_gear_type ON gear(type)`,
   `CREATE INDEX IF NOT EXISTS idx_run_gear_run ON run_gear(run_id)`,
+
+  // v11 — Starting mileage for used gear
+  `ALTER TABLE gear ADD COLUMN starting_distance_mi REAL NOT NULL DEFAULT 0`,
 ];
 
 // ---------------------------------------------------------------------------

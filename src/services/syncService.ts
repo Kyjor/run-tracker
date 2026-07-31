@@ -12,6 +12,59 @@ import { supabase } from './supabaseClient';
 import type { Run, Goal, ActivePlan, TrainingPlan, PlanDay, SyncQueueItem, Gear } from '../types';
 import { saveSettings } from './settingsService';
 import { getPlanById, getPlanDays } from './planService';
+import { generateId } from '../utils/generateId';
+
+/** Queue a cloud delete for later when offline / request fails. */
+export async function queueCloudDelete(
+  db: Database,
+  tableName: string,
+  recordId: string,
+): Promise<void> {
+  const queueId = generateId();
+  const now = new Date().toISOString();
+  await db.execute(
+    `INSERT INTO sync_queue (id, table_name, record_id, action, payload, created_at)
+     VALUES ($1, $2, $3, 'delete', $4, $5)`,
+    [queueId, tableName, recordId, JSON.stringify({ id: recordId }), now],
+  );
+}
+
+/**
+ * Delete a row from Supabase now, or queue if offline/fails.
+ * Optionally clean related tables after a successful immediate delete.
+ */
+export async function deleteFromCloudOrQueue(
+  db: Database,
+  tableName: string,
+  recordId: string,
+  afterSuccess?: (userId: string) => Promise<void>,
+): Promise<void> {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) {
+    await queueCloudDelete(db, tableName, recordId);
+    return;
+  }
+
+  const { error } = await supabase
+    .from(tableName)
+    .delete()
+    .eq('id', recordId)
+    .eq('user_id', session.user.id);
+
+  if (error) {
+    console.warn(`Failed to delete ${tableName}:${recordId} from cloud, queueing:`, error);
+    await queueCloudDelete(db, tableName, recordId);
+    return;
+  }
+
+  if (afterSuccess) {
+    try {
+      await afterSuccess(session.user.id);
+    } catch (err) {
+      console.warn(`Related cleanup failed for ${tableName}:${recordId}`, err);
+    }
+  }
+}
 
 export async function syncToCloud(db: Database): Promise<void> {
   const { data: { session } } = await supabase.auth.getSession();
@@ -50,15 +103,28 @@ async function processQueuedDeletes(db: Database, userId: string): Promise<void>
       if (error) {
         console.error(`Failed to process queued delete for ${item.table_name}:${item.record_id}:`, error);
         // Keep in queue for next sync attempt
-      } else {
-        // Successfully deleted, remove from queue
-        await db.execute('DELETE FROM sync_queue WHERE id = $1', [item.id]);
+        continue;
       }
+
+      await cleanupRelatedCloudRows(item.table_name, item.record_id, userId);
+      await db.execute('DELETE FROM sync_queue WHERE id = $1', [item.id]);
     } catch (err) {
       console.error(`Error processing queued delete ${item.id}:`, err);
-      // Remove malformed queue items
-      await db.execute('DELETE FROM sync_queue WHERE id = $1', [item.id]);
+      // Keep in queue — transient errors should not drop the delete permanently
     }
+  }
+}
+
+async function cleanupRelatedCloudRows(
+  tableName: string,
+  recordId: string,
+  userId: string,
+): Promise<void> {
+  if (tableName === 'user_runs') {
+    await supabase.from('user_run_gear').delete().eq('user_id', userId).eq('run_id', recordId);
+    await supabase.from('user_run_routes').delete().eq('user_id', userId).eq('run_id', recordId);
+  } else if (tableName === 'user_gear') {
+    await supabase.from('user_run_gear').delete().eq('user_id', userId).eq('gear_id', recordId);
   }
 }
 
@@ -378,6 +444,7 @@ async function pushDirtyGear(db: Database, userId: string): Promise<void> {
       is_active: gear.is_active === 1,
       retired_at: gear.retired_at,
       alert_threshold_mi: gear.alert_threshold_mi,
+      starting_distance_mi: gear.starting_distance_mi ?? 0,
       created_at: gear.created_at,
       updated_at: gear.updated_at,
     });
@@ -422,7 +489,7 @@ export async function pullFromCloud(db: Database): Promise<void> {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) return;
 
-  // Pull runs
+  // Pull runs — insert missing; update non-dirty local rows from remote
   const { data: remoteRuns } = await supabase
     .from('user_runs')
     .select('*')
@@ -430,7 +497,37 @@ export async function pullFromCloud(db: Database): Promise<void> {
 
   if (remoteRuns) {
     for (const run of remoteRuns) {
-      const existing = await db.select<Run[]>('SELECT id FROM runs WHERE id=$1', [run.id]);
+      const existing = await db.select<Run[]>('SELECT id, sync_status FROM runs WHERE id=$1', [run.id]);
+      const cols = [
+        run.date,
+        run.distance_value,
+        run.distance_unit,
+        run.duration_seconds,
+        run.run_type,
+        run.plan_day_id,
+        run.notes,
+        run.source,
+        run.avg_heart_rate ?? null,
+        run.max_heart_rate ?? null,
+        run.min_heart_rate ?? null,
+        run.hr_zones ?? null,
+        run.avg_cadence ?? null,
+        run.avg_stride_length_meters ?? null,
+        run.avg_ground_contact_time_ms ?? null,
+        run.avg_vertical_oscillation_cm ?? null,
+        run.avg_power_watts ?? null,
+        run.max_power_watts ?? null,
+        run.elevation_gain_meters ?? null,
+        run.elevation_loss_meters ?? null,
+        run.vo2_max ?? null,
+        run.temperature_celsius ?? null,
+        run.humidity_percent ?? null,
+        run.weather_condition ?? null,
+        run.calories ?? null,
+        run.created_at,
+        run.updated_at,
+      ];
+
       if (existing.length === 0) {
         await db.execute(
           `INSERT INTO runs
@@ -453,41 +550,24 @@ export async function pullFromCloud(db: Database): Promise<void> {
              $20,$21,
              $22,
              $23,$24,$25,
-             $26,$27,
-             $28,$29,'synced'
+             $26,0,
+             $27,$28,'synced'
            )`,
-          [
-            run.id,
-            run.date,
-            run.distance_value,
-            run.distance_unit,
-            run.duration_seconds,
-            run.run_type,
-            run.plan_day_id,
-            run.notes,
-            run.source,
-            // metrics (may be undefined)
-            run.avg_heart_rate ?? null,
-            run.max_heart_rate ?? null,
-            run.min_heart_rate ?? null,
-            run.hr_zones ?? null,
-            run.avg_cadence ?? null,
-            run.avg_stride_length_meters ?? null,
-            run.avg_ground_contact_time_ms ?? null,
-            run.avg_vertical_oscillation_cm ?? null,
-            run.avg_power_watts ?? null,
-            run.max_power_watts ?? null,
-            run.elevation_gain_meters ?? null,
-            run.elevation_loss_meters ?? null,
-            run.vo2_max ?? null,
-            run.temperature_celsius ?? null,
-            run.humidity_percent ?? null,
-            run.weather_condition ?? null,
-            run.calories ?? null,
-            0, // has_route is local-only for now
-            run.created_at,
-            run.updated_at,
-          ],
+          [run.id, ...cols],
+        );
+      } else if (existing[0].sync_status !== 'dirty') {
+        await db.execute(
+          `UPDATE runs SET
+            date=$1, distance_value=$2, distance_unit=$3, duration_seconds=$4, run_type=$5,
+            plan_day_id=$6, notes=$7, source=$8,
+            avg_heart_rate=$9, max_heart_rate=$10, min_heart_rate=$11, hr_zones=$12,
+            avg_cadence=$13, avg_stride_length_meters=$14, avg_ground_contact_time_ms=$15,
+            avg_vertical_oscillation_cm=$16, avg_power_watts=$17, max_power_watts=$18,
+            elevation_gain_meters=$19, elevation_loss_meters=$20, vo2_max=$21,
+            temperature_celsius=$22, humidity_percent=$23, weather_condition=$24,
+            calories=$25, created_at=$26, updated_at=$27, sync_status='synced'
+           WHERE id=$28`,
+          [...cols, run.id],
         );
       }
     }
@@ -506,7 +586,6 @@ export async function pullFromCloud(db: Database): Promise<void> {
         [route.id],
       );
       if (existingRoute.length === 0) {
-        // Only insert route if the corresponding run exists locally
         const runExists = await db.select<Run[]>(
           'SELECT id FROM runs WHERE id = $1',
           [route.run_id],
@@ -517,8 +596,6 @@ export async function pullFromCloud(db: Database): Promise<void> {
           'INSERT INTO run_routes (id, run_id, points_json, created_at) VALUES ($1,$2,$3,$4)',
           [route.id, route.run_id, route.points_json, route.created_at],
         );
-
-        // Mark the run as having a route
         await db.execute(
           'UPDATE runs SET has_route = 1 WHERE id = $1',
           [route.run_id],
@@ -536,23 +613,19 @@ export async function pullFromCloud(db: Database): Promise<void> {
     .maybeSingle();
 
   if (remoteActivePlan) {
-    // Deactivate local active plans first
     await db.execute("UPDATE active_plan SET is_active = 0");
     
-    // Check if this plan already exists locally
     const existing = await db.select<ActivePlan[]>(
       'SELECT * FROM active_plan WHERE id = $1',
       [remoteActivePlan.id],
     );
     
     if (existing.length > 0) {
-      // Update existing
       await db.execute(
         "UPDATE active_plan SET plan_id=$1, start_date=$2, is_active=1, sync_status='synced' WHERE id=$3",
         [remoteActivePlan.plan_id, remoteActivePlan.start_date, remoteActivePlan.id],
       );
     } else {
-      // Insert new
       await db.execute(
         `INSERT INTO active_plan (id, plan_id, start_date, is_active, created_at, sync_status)
          VALUES ($1,$2,$3,1,$4,'synced')`,
@@ -560,8 +633,32 @@ export async function pullFromCloud(db: Database): Promise<void> {
       );
     }
   } else {
-    // No active plan in cloud, deactivate local ones
     await db.execute("UPDATE active_plan SET is_active = 0");
+  }
+
+  // Pull goals
+  const { data: remoteGoals } = await supabase
+    .from('user_goals')
+    .select('*')
+    .eq('user_id', session.user.id);
+
+  if (remoteGoals) {
+    for (const g of remoteGoals) {
+      const existing = await db.select<Goal[]>('SELECT id, sync_status FROM goals WHERE id=$1', [g.id]);
+      if (existing.length === 0) {
+        await db.execute(
+          `INSERT INTO goals (id, type, target_value, target_unit, start_date, end_date, created_at, sync_status)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,'synced')`,
+          [g.id, g.type, g.target_value, g.target_unit, g.start_date, g.end_date, g.created_at],
+        );
+      } else if (existing[0].sync_status !== 'dirty') {
+        await db.execute(
+          `UPDATE goals SET type=$1, target_value=$2, target_unit=$3, start_date=$4, end_date=$5,
+            created_at=$6, sync_status='synced' WHERE id=$7`,
+          [g.type, g.target_value, g.target_unit, g.start_date, g.end_date, g.created_at, g.id],
+        );
+      }
+    }
   }
 
   // Pull gear
@@ -572,18 +669,28 @@ export async function pullFromCloud(db: Database): Promise<void> {
 
   if (remoteGear) {
     for (const g of remoteGear) {
-      const existing = await db.select<Gear[]>('SELECT id FROM gear WHERE id=$1', [g.id]);
+      const existing = await db.select<Gear[]>('SELECT id, sync_status FROM gear WHERE id=$1', [g.id]);
+      const gearVals = [
+        g.type, g.name, g.brand, g.model, g.purchase_date, g.notes ?? '',
+        g.is_active ? 1 : 0, g.retired_at ?? null, g.alert_threshold_mi ?? null,
+        g.starting_distance_mi ?? 0, g.created_at, g.updated_at,
+      ];
       if (existing.length === 0) {
         await db.execute(
           `INSERT INTO gear
             (id, type, name, brand, model, purchase_date, notes, is_active, retired_at,
-             alert_threshold_mi, created_at, updated_at, sync_status)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'synced')`,
-          [
-            g.id, g.type, g.name, g.brand, g.model, g.purchase_date, g.notes ?? '',
-            g.is_active ? 1 : 0, g.retired_at ?? null, g.alert_threshold_mi ?? null,
-            g.created_at, g.updated_at,
-          ],
+             alert_threshold_mi, starting_distance_mi, created_at, updated_at, sync_status)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'synced')`,
+          [g.id, ...gearVals],
+        );
+      } else if (existing[0].sync_status !== 'dirty') {
+        await db.execute(
+          `UPDATE gear SET
+            type=$1, name=$2, brand=$3, model=$4, purchase_date=$5, notes=$6,
+            is_active=$7, retired_at=$8, alert_threshold_mi=$9, starting_distance_mi=$10,
+            created_at=$11, updated_at=$12, sync_status='synced'
+           WHERE id=$13`,
+          [...gearVals, g.id],
         );
       }
     }
@@ -595,7 +702,32 @@ export async function pullFromCloud(db: Database): Promise<void> {
     .eq('user_id', session.user.id);
 
   if (remoteRunGear) {
+    // For synced (non-dirty) runs, replace local links from cloud so removals apply
+    const syncedRuns = await db.select<{ id: string }[]>(
+      "SELECT id FROM runs WHERE sync_status = 'synced'",
+    );
+    const syncedIds = new Set(syncedRuns.map(r => r.id));
+    const byRun = new Map<string, string[]>();
     for (const link of remoteRunGear) {
+      (byRun.get(link.run_id) ?? (byRun.set(link.run_id, []), byRun.get(link.run_id)!)).push(link.gear_id);
+    }
+
+    for (const runId of syncedIds) {
+      await db.execute('DELETE FROM run_gear WHERE run_id = $1', [runId]);
+      const gearIds = byRun.get(runId) ?? [];
+      for (const gearId of gearIds) {
+        const gearExists = await db.select<{ id: string }[]>('SELECT id FROM gear WHERE id=$1', [gearId]);
+        if (gearExists.length === 0) continue;
+        await db.execute(
+          'INSERT OR IGNORE INTO run_gear (run_id, gear_id) VALUES ($1, $2)',
+          [runId, gearId],
+        );
+      }
+    }
+
+    // Also insert links for runs that weren't covered (e.g. just inserted)
+    for (const link of remoteRunGear) {
+      if (syncedIds.has(link.run_id)) continue;
       const runExists = await db.select<{ id: string }[]>('SELECT id FROM runs WHERE id=$1', [link.run_id]);
       const gearExists = await db.select<{ id: string }[]>('SELECT id FROM gear WHERE id=$1', [link.gear_id]);
       if (runExists.length === 0 || gearExists.length === 0) continue;

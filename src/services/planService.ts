@@ -256,7 +256,13 @@ export async function setActivePlan(db: Database, planId: string, startDate: str
 }
 
 export async function clearActivePlan(db: Database): Promise<void> {
-  await db.execute("UPDATE active_plan SET is_active = 0");
+  await db.execute(
+    "UPDATE active_plan SET is_active = 0, sync_status='dirty' WHERE is_active = 1",
+  );
+  const { syncToCloud } = await import('./syncService');
+  syncToCloud(db).catch((e) => {
+    console.error('Failed to sync after clearing active plan:', e);
+  });
 }
 
 // ---------------------------------------------------------------------------

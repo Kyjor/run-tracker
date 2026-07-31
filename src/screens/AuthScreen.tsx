@@ -50,7 +50,7 @@ export function AuthScreen() {
       <div className="flex flex-col items-center justify-center px-6 pt-8 flex-1">
         <div className="text-5xl mb-4">🏃</div>
       <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-1">
-        {mode === 'signin' ? 'Welcome back' : 'Join Run With Friends'}
+        {mode === 'signin' ? 'Welcome back' : 'Join Run 4 Fun'}
       </h1>
       <p className="text-gray-500 dark:text-gray-400 mb-8 text-sm">
         {mode === 'signin' ? 'Sign in to sync your runs across devices' : 'Create an account for cloud sync & social features'}

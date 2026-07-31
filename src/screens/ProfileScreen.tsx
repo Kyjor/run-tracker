@@ -84,11 +84,11 @@ export function ProfileScreen() {
   }
 
   const menuItems = [
+    { label: 'Personal Bests', path: '/profile/personal-bests' },
     { label: 'My Plans', path: '/profile/plans' },
     { label: 'Goals', path: '/profile/goals' },
     { label: 'Gear', path: '/profile/gear' },
     { label: 'Achievements', path: '/profile/achievements' },
-    { label: 'Nutrition', path: '/profile/nutrition' },
     { label: 'Public Profile', path: user ? `/social/profile/${user.id}` : '/auth' },
     { label: 'Friends', path: '/social' },
     { label: 'Community Plans', path: '/community' },

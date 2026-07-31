@@ -15,16 +15,18 @@
 		7313282B086162AFE112C43D /* Security.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D7A7DBA0FE33596A8D01E5CD /* Security.framework */; };
 		8A8E07E5DC74023CD44351F5 /* CoreGraphics.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = ED31604C72E9A72E1F829D2C /* CoreGraphics.framework */; };
 		9C0A0D338C02F9A20403E13B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = F8716191774CDF27BCDEC903 /* Assets.xcassets */; };
-		AA11223344556677889900AA /* HealthKitBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB11223344556677889900BB /* HealthKitBridge.swift */; };
-		EE11223344556677889900EE /* LocationTrackingBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF11223344556677889900FF /* LocationTrackingBridge.swift */; };
 		A011223344556677889900AA /* HRMBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = B011223344556677889900BB /* HRMBridge.swift */; };
-		FF22334455667788990011AA /* CoreLocation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = FF22334455667788990011BB /* CoreLocation.framework */; };
-		CC11223344556677889900CC /* HealthKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = DD11223344556677889900DD /* HealthKit.framework */; };
+		A111223344556677889900AD /* AdBannerBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = B111223344556677889900AD /* AdBannerBridge.swift */; };
+		AA11223344556677889900AA /* HealthKitBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB11223344556677889900BB /* HealthKitBridge.swift */; };
+		AA5E1AE878C969BAC9CEEC75 /* libPods-run-with-friends_iOS.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 97ADCA9892EAE9AAED2C106F /* libPods-run-with-friends_iOS.a */; };
 		C011223344556677889900CC /* CoreBluetooth.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D011223344556677889900DD /* CoreBluetooth.framework */; };
+		CC11223344556677889900CC /* HealthKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = DD11223344556677889900DD /* HealthKit.framework */; };
 		D1CC027CDCB2E23BC2CB7400 /* libapp.a in Frameworks */ = {isa = PBXBuildFile; fileRef = AB8FC300930C0BBDD4BE9DDD /* libapp.a */; };
 		E3FA0513E9E7612E6221EA3D /* Metal.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = DBCDB643916B01C7E533DDD3 /* Metal.framework */; };
+		EE11223344556677889900EE /* LocationTrackingBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF11223344556677889900FF /* LocationTrackingBridge.swift */; };
 		FAE916A5E3B0424CEEE3A484 /* UIKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1AEBB51B9E05293F093259AC /* UIKit.framework */; };
 		FDEA24C945BA345ACFF683C9 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 71EBFE8655B52B230CFBFB99 /* LaunchScreen.storyboard */; };
+		FF22334455667788990011AA /* CoreLocation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = FF22334455667788990011BB /* CoreLocation.framework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -33,26 +35,30 @@
 		1AEBB51B9E05293F093259AC /* UIKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = UIKit.framework; path = System/Library/Frameworks/UIKit.framework; sourceTree = SDKROOT; };
 		1E2F935EF8ABF913BC11C715 /* main.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = main.mm; sourceTree = "<group>"; };
 		2AF552B6195628E0A45AEFEA /* MetalKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = MetalKit.framework; path = System/Library/Frameworks/MetalKit.framework; sourceTree = SDKROOT; };
+		50C0A5CDDDB8DA0700AAB789 /* Pods-run-with-friends_iOS.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-run-with-friends_iOS.debug.xcconfig"; path = "Target Support Files/Pods-run-with-friends_iOS/Pods-run-with-friends_iOS.debug.xcconfig"; sourceTree = "<group>"; };
 		55F3C5838998906CA8BEF0B8 /* WebKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WebKit.framework; path = System/Library/Frameworks/WebKit.framework; sourceTree = SDKROOT; };
 		64A082BC72205D7AFE24B886 /* main.rs */ = {isa = PBXFileReference; lastKnownFileType = text; path = main.rs; sourceTree = "<group>"; };
+		6B6D9BA1CF057F3A3CEAB21D /* Pods-run-with-friends_iOS.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-run-with-friends_iOS.release.xcconfig"; path = "Target Support Files/Pods-run-with-friends_iOS/Pods-run-with-friends_iOS.release.xcconfig"; sourceTree = "<group>"; };
 		71EBFE8655B52B230CFBFB99 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
 		731AA93C2F4CDFD200FBA4AE /* run-with-friends_iOS-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "run-with-friends_iOS-Bridging-Header.h"; sourceTree = "<group>"; };
 		7A92931E8B8C6A40855AB9B9 /* Run With Friends.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Run With Friends.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		97ADCA9892EAE9AAED2C106F /* libPods-run-with-friends_iOS.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-run-with-friends_iOS.a"; sourceTree = BUILT_PRODUCTS_DIR; };
 		AB8FC300930C0BBDD4BE9DDD /* libapp.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; path = libapp.a; sourceTree = "<group>"; };
+		B011223344556677889900BB /* HRMBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HRMBridge.swift; sourceTree = SOURCE_ROOT; };
+		B111223344556677889900AD /* AdBannerBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdBannerBridge.swift; sourceTree = SOURCE_ROOT; };
 		B7D4454F691AA34FB04B2C6A /* bindings.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = bindings.h; sourceTree = "<group>"; };
 		BB11223344556677889900BB /* HealthKitBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthKitBridge.swift; sourceTree = SOURCE_ROOT; };
-		FF11223344556677889900FF /* LocationTrackingBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationTrackingBridge.swift; sourceTree = SOURCE_ROOT; };
-		B011223344556677889900BB /* HRMBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HRMBridge.swift; sourceTree = SOURCE_ROOT; };
-		FF22334455667788990011BB /* CoreLocation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreLocation.framework; path = System/Library/Frameworks/CoreLocation.framework; sourceTree = SDKROOT; };
-		D011223344556677889900DD /* CoreBluetooth.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreBluetooth.framework; path = System/Library/Frameworks/CoreBluetooth.framework; sourceTree = SDKROOT; };
 		CC221A14E99790EB6CA82C88 /* QuartzCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = QuartzCore.framework; path = System/Library/Frameworks/QuartzCore.framework; sourceTree = SDKROOT; };
 		CE7BCCAE9B6A9A63431CCF5D /* run-with-friends_iOS.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "run-with-friends_iOS.entitlements"; sourceTree = "<group>"; };
+		D011223344556677889900DD /* CoreBluetooth.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreBluetooth.framework; path = System/Library/Frameworks/CoreBluetooth.framework; sourceTree = SDKROOT; };
 		D7A7DBA0FE33596A8D01E5CD /* Security.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Security.framework; path = System/Library/Frameworks/Security.framework; sourceTree = SDKROOT; };
 		DBCDB643916B01C7E533DDD3 /* Metal.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Metal.framework; path = System/Library/Frameworks/Metal.framework; sourceTree = SDKROOT; };
 		DD11223344556677889900DD /* HealthKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = HealthKit.framework; path = System/Library/Frameworks/HealthKit.framework; sourceTree = SDKROOT; };
 		ED31604C72E9A72E1F829D2C /* CoreGraphics.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreGraphics.framework; path = System/Library/Frameworks/CoreGraphics.framework; sourceTree = SDKROOT; };
 		F8716191774CDF27BCDEC903 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		FD7B1DCFE40C06CC59494656 /* lib.rs */ = {isa = PBXFileReference; lastKnownFileType = text; path = lib.rs; sourceTree = "<group>"; };
+		FF11223344556677889900FF /* LocationTrackingBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationTrackingBridge.swift; sourceTree = SOURCE_ROOT; };
+		FF22334455667788990011BB /* CoreLocation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreLocation.framework; path = System/Library/Frameworks/CoreLocation.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -71,6 +77,7 @@
 				CC11223344556677889900CC /* HealthKit.framework in Frameworks */,
 				FF22334455667788990011AA /* CoreLocation.framework in Frameworks */,
 				C011223344556677889900CC /* CoreBluetooth.framework in Frameworks */,
+				AA5E1AE878C969BAC9CEEC75 /* libPods-run-with-friends_iOS.a in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -111,6 +118,8 @@
 				BB11223344556677889900BB /* HealthKitBridge.swift */,
 				FF11223344556677889900FF /* LocationTrackingBridge.swift */,
 				B011223344556677889900BB /* HRMBridge.swift */,
+				B111223344556677889900AD /* AdBannerBridge.swift */,
+				9867B8118D687766D1B3374A /* Pods */,
 			);
 			sourceTree = "<group>";
 		};
@@ -121,6 +130,16 @@
 				BF34421619711078EE53931C /* bindings */,
 			);
 			path = "run-with-friends";
+			sourceTree = "<group>";
+		};
+		9867B8118D687766D1B3374A /* Pods */ = {
+			isa = PBXGroup;
+			children = (
+				50C0A5CDDDB8DA0700AAB789 /* Pods-run-with-friends_iOS.debug.xcconfig */,
+				6B6D9BA1CF057F3A3CEAB21D /* Pods-run-with-friends_iOS.release.xcconfig */,
+			);
+			name = Pods;
+			path = Pods;
 			sourceTree = "<group>";
 		};
 		9BB382E6714654AAB86D68F5 /* run-with-friends_iOS */ = {
@@ -145,6 +164,7 @@
 				55F3C5838998906CA8BEF0B8 /* WebKit.framework */,
 				DD11223344556677889900DD /* HealthKit.framework */,
 				D011223344556677889900DD /* CoreBluetooth.framework */,
+				97ADCA9892EAE9AAED2C106F /* libPods-run-with-friends_iOS.a */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -179,18 +199,18 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 374C7895BA63C81091EDB592 /* Build configuration list for PBXNativeTarget "run-with-friends_iOS" */;
 			buildPhases = (
+				AAC4256ED780AB94C164B46A /* [CP] Check Pods Manifest.lock */,
 				C198D36CB650A215B17FE890 /* Build Rust Code */,
 				473510311370F9501CC5B983 /* Sources */,
 				7E7547E0ADD73F89DADB0883 /* Resources */,
 				5723C86033D63014D9AAA97D /* Frameworks */,
+				2E38809DCF1053DC9B943BCA /* [CP] Copy Pods Resources */,
 			);
 			buildRules = (
 			);
 			dependencies = (
 			);
 			name = "run-with-friends_iOS";
-			packageProductDependencies = (
-			);
 			productName = "run-with-friends_iOS";
 			productReference = 7A92931E8B8C6A40855AB9B9 /* Run With Friends.app */;
 			productType = "com.apple.product-type.application";
@@ -220,6 +240,7 @@
 			);
 			mainGroup = 611CEB1F8F1152ABFEAE898E;
 			minimizedProjectReferenceProxies = 1;
+			productRefGroup = D89C292F3535EC98FFBDBFD7 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
@@ -242,6 +263,45 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
+		2E38809DCF1053DC9B943BCA /* [CP] Copy Pods Resources */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+				"${PODS_ROOT}/Target Support Files/Pods-run-with-friends_iOS/Pods-run-with-friends_iOS-resources-${CONFIGURATION}-input-files.xcfilelist",
+			);
+			name = "[CP] Copy Pods Resources";
+			outputFileListPaths = (
+				"${PODS_ROOT}/Target Support Files/Pods-run-with-friends_iOS/Pods-run-with-friends_iOS-resources-${CONFIGURATION}-output-files.xcfilelist",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-run-with-friends_iOS/Pods-run-with-friends_iOS-resources.sh\"\n";
+			showEnvVarsInLog = 0;
+		};
+		AAC4256ED780AB94C164B46A /* [CP] Check Pods Manifest.lock */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"${PODS_PODFILE_DIR_PATH}/Podfile.lock",
+				"${PODS_ROOT}/Manifest.lock",
+			);
+			name = "[CP] Check Pods Manifest.lock";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(DERIVED_FILE_DIR)/Pods-run-with-friends_iOS-checkManifestLockResult.txt",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "diff \"${PODS_PODFILE_DIR_PATH}/Podfile.lock\" \"${PODS_ROOT}/Manifest.lock\" > /dev/null\nif [ $? != 0 ] ; then\n    # print error to STDERR\n    echo \"error: The sandbox is not in sync with the Podfile.lock. Run 'pod install' or update your CocoaPods installation.\" >&2\n    exit 1\nfi\n# This output is used by Xcode 'outputs' to avoid re-running this script phase.\necho \"SUCCESS\" > \"${SCRIPT_OUTPUT_FILE_0}\"\n";
+			showEnvVarsInLog = 0;
+		};
 		C198D36CB650A215B17FE890 /* Build Rust Code */ = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;
@@ -261,7 +321,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "npm run -- tauri ios xcode-script -v --platform ${PLATFORM_DISPLAY_NAME:?} --sdk-root ${SDKROOT:?} --framework-search-paths \"${FRAMEWORK_SEARCH_PATHS:?}\" --header-search-paths \"${HEADER_SEARCH_PATHS:?}\" --gcc-preprocessor-definitions \"${GCC_PREPROCESSOR_DEFINITIONS:-}\" --configuration ${CONFIGURATION:?} ${FORCE_COLOR} ${ARCHS:?}";
+			shellScript = "if [ -f \"${SRCROOT}/Externals/.skip-rust-rebuild\" ]; then echo \"Skipping Rust rebuild\"; exit 0; fi\nnpm run -- tauri ios xcode-script -v --platform ${PLATFORM_DISPLAY_NAME:?} --sdk-root ${SDKROOT:?} --framework-search-paths \"${FRAMEWORK_SEARCH_PATHS:?}\" --header-search-paths \"${HEADER_SEARCH_PATHS:?}\" --gcc-preprocessor-definitions \"${GCC_PREPROCESSOR_DEFINITIONS:-}\" --configuration ${CONFIGURATION:?} ${FORCE_COLOR} ${ARCHS:?}";
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -274,6 +334,7 @@
 				AA11223344556677889900AA /* HealthKitBridge.swift in Sources */,
 				EE11223344556677889900EE /* LocationTrackingBridge.swift in Sources */,
 				A011223344556677889900AA /* HRMBridge.swift in Sources */,
+				A111223344556677889900AD /* AdBannerBridge.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -338,6 +399,7 @@
 		};
 		586FAD1E542117FE93B84AC0 /* release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 6B6D9BA1CF057F3A3CEAB21D /* Pods-run-with-friends_iOS.release.xcconfig */;
 			buildSettings = {
 				ARCHS = arm64;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
@@ -356,6 +418,14 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
+				LIBRARY_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)/Externals/arm64/$(CONFIGURATION)",
+					"$(PROJECT_DIR)/Externals/x86_64/$(CONFIGURATION)",
+					"$(SDKROOT)/usr/lib/swift",
+					"$(TOOLCHAIN_DIR)/usr/lib/swift/$(PLATFORM_NAME)",
+					"$(TOOLCHAIN_DIR)/usr/lib/swift-5.0/$(PLATFORM_NAME)",
+				);
 				"LIBRARY_SEARCH_PATHS[arch=arm64]" = (
 					"$(inherited)",
 					"$(PROJECT_DIR)/Externals/arm64/$(CONFIGURATION)",
@@ -371,7 +441,7 @@
 					"$(TOOLCHAIN_DIR)/usr/lib/swift-5.0/$(PLATFORM_NAME)",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.runwithfriends.app;
-				PRODUCT_NAME = "Run With Friends";
+				PRODUCT_NAME = "Run 4 Fun";
 				SDKROOT = iphoneos;
 				SWIFT_OBJC_BRIDGING_HEADER = "run-with-friends_iOS-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
@@ -382,6 +452,7 @@
 		};
 		DF58F95A1D5E26D3B8B68542 /* debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 50C0A5CDDDB8DA0700AAB789 /* Pods-run-with-friends_iOS.debug.xcconfig */;
 			buildSettings = {
 				ARCHS = arm64;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
@@ -400,6 +471,14 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
+				LIBRARY_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)/Externals/arm64/$(CONFIGURATION)",
+					"$(PROJECT_DIR)/Externals/x86_64/$(CONFIGURATION)",
+					"$(SDKROOT)/usr/lib/swift",
+					"$(TOOLCHAIN_DIR)/usr/lib/swift/$(PLATFORM_NAME)",
+					"$(TOOLCHAIN_DIR)/usr/lib/swift-5.0/$(PLATFORM_NAME)",
+				);
 				"LIBRARY_SEARCH_PATHS[arch=arm64]" = (
 					"$(inherited)",
 					"$(PROJECT_DIR)/Externals/arm64/$(CONFIGURATION)",
@@ -415,7 +494,7 @@
 					"$(TOOLCHAIN_DIR)/usr/lib/swift-5.0/$(PLATFORM_NAME)",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.runwithfriends.app;
-				PRODUCT_NAME = "Run With Friends";
+				PRODUCT_NAME = "Run 4 Fun";
 				SDKROOT = iphoneos;
 				SWIFT_OBJC_BRIDGING_HEADER = "run-with-friends_iOS-Bridging-Header.h";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";

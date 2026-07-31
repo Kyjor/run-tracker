@@ -12,6 +12,8 @@ export interface CreateGearInput {
   purchase_date?: string | null;
   notes?: string;
   alert_threshold_mi?: number | null;
+  /** Miles already on the gear before tracking in-app */
+  starting_distance_mi?: number;
 }
 
 export interface UpdateGearInput {
@@ -21,6 +23,7 @@ export interface UpdateGearInput {
   purchase_date?: string | null;
   notes?: string;
   alert_threshold_mi?: number | null;
+  starting_distance_mi?: number;
   is_active?: number;
   retired_at?: string | null;
 }
@@ -63,6 +66,7 @@ export async function createGear(db: Database, input: CreateGearInput): Promise<
       input.type === 'shoes'
         ? (input.alert_threshold_mi ?? DEFAULT_SHOE_ALERT_MI)
         : (input.alert_threshold_mi ?? null),
+    starting_distance_mi: Math.max(0, input.starting_distance_mi ?? 0),
     created_at: now,
     updated_at: now,
     sync_status: 'local',
@@ -71,12 +75,12 @@ export async function createGear(db: Database, input: CreateGearInput): Promise<
   await db.execute(
     `INSERT INTO gear
       (id, type, name, brand, model, purchase_date, notes, is_active, retired_at,
-       alert_threshold_mi, created_at, updated_at, sync_status)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+       alert_threshold_mi, starting_distance_mi, created_at, updated_at, sync_status)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
     [
       gear.id, gear.type, gear.name, gear.brand, gear.model, gear.purchase_date,
       gear.notes, gear.is_active, gear.retired_at, gear.alert_threshold_mi,
-      gear.created_at, gear.updated_at, gear.sync_status,
+      gear.starting_distance_mi, gear.created_at, gear.updated_at, gear.sync_status,
     ],
   );
 
@@ -97,9 +101,9 @@ export async function updateGear(db: Database, id: string, input: UpdateGearInpu
   await db.execute(
     `UPDATE gear SET
       name = $1, brand = $2, model = $3, purchase_date = $4, notes = $5,
-      alert_threshold_mi = $6, is_active = $7, retired_at = $8,
-      updated_at = $9, sync_status = 'dirty'
-     WHERE id = $10`,
+      alert_threshold_mi = $6, starting_distance_mi = $7, is_active = $8, retired_at = $9,
+      updated_at = $10, sync_status = 'dirty'
+     WHERE id = $11`,
     [
       input.name ?? existing.name,
       input.brand !== undefined ? input.brand : existing.brand,
@@ -107,6 +111,9 @@ export async function updateGear(db: Database, id: string, input: UpdateGearInpu
       input.purchase_date !== undefined ? input.purchase_date : existing.purchase_date,
       input.notes ?? existing.notes,
       input.alert_threshold_mi !== undefined ? input.alert_threshold_mi : existing.alert_threshold_mi,
+      input.starting_distance_mi !== undefined
+        ? Math.max(0, input.starting_distance_mi)
+        : (existing.starting_distance_mi ?? 0),
       input.is_active !== undefined ? input.is_active : existing.is_active,
       input.retired_at !== undefined ? input.retired_at : existing.retired_at,
       now,
@@ -125,6 +132,15 @@ export async function retireGear(db: Database, id: string): Promise<void> {
 }
 
 export async function deleteGear(db: Database, id: string): Promise<void> {
+  const existing = await getGearById(db, id);
+  if (existing && existing.sync_status !== 'local') {
+    const { deleteFromCloudOrQueue } = await import('./syncService');
+    await deleteFromCloudOrQueue(db, 'user_gear', id, async (userId) => {
+      const { supabase } = await import('./supabaseClient');
+      await supabase.from('user_run_gear').delete().eq('user_id', userId).eq('gear_id', id);
+    });
+  }
+
   await db.execute('DELETE FROM run_gear WHERE gear_id = $1', [id]);
   await db.execute('DELETE FROM gear_defaults WHERE gear_id = $1', [id]);
   await db.execute('DELETE FROM gear WHERE id = $1', [id]);
@@ -141,6 +157,11 @@ export async function assignGearToRun(db: Database, runId: string, gearIds: stri
 
   // Update defaults from assigned gear and mark dirty for sync
   const now = new Date().toISOString();
+  // Mark run dirty so push replaces user_run_gear (including removals)
+  await db.execute(
+    "UPDATE runs SET sync_status = 'dirty', updated_at = $1 WHERE id = $2",
+    [now, runId],
+  );
   for (const gearId of gearIds) {
     const gear = await getGearById(db, gearId);
     if (gear && gear.is_active) {
@@ -192,6 +213,7 @@ export async function getDefaultGearIds(db: Database): Promise<string[]> {
 }
 
 export async function getGearStats(db: Database, gearId: string): Promise<GearStats> {
+  const gear = await getGearById(db, gearId);
   const rows = await db.select<{
     distance_value: number;
     distance_unit: DistanceUnit;
@@ -205,7 +227,7 @@ export async function getGearStats(db: Database, gearId: string): Promise<GearSt
     [gearId],
   );
 
-  let totalMi = 0;
+  let totalMi = gear?.starting_distance_mi ?? 0;
   for (const row of rows) {
     totalMi += convertDistance(row.distance_value, row.distance_unit, 'mi');
   }

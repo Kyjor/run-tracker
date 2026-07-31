@@ -1,6 +1,7 @@
 import type { Run, RunStats, DistanceUnit } from '../types';
 import { convertDistance } from './paceUtils';
 import { format, subDays, parseISO, differenceInCalendarDays, startOfWeek, endOfWeek } from 'date-fns';
+import { extractDate } from './dateUtils';
 
 /**
  * Calculate run statistics from an array of runs (useful for friend profiles)
@@ -27,27 +28,25 @@ export function calculateStatsFromRuns(runs: Run[], unit: DistanceUnit): RunStat
   const avg_pace_seconds_per_unit = total_distance > 0 ? total_duration_seconds / total_distance : 0;
   const longest_run_distance = Math.max(
     ...runs.map(r => convertDistance(r.distance_value, r.distance_unit, unit)),
+    0,
   );
 
-  // Streak calculation
-  const runDates = new Set(runs.map(r => r.date));
+  // Normalize to calendar dates so ISO datetimes match yyyy-MM-dd comparisons
+  const runDates = new Set(runs.map(r => extractDate(r.date)));
   let current_streak = 0;
-  let longest_streak = 0;
   let streak = 0;
-  
-  // Check backwards from today
+
   for (let i = 0; i <= 365; i++) {
     const d = format(subDays(new Date(), i), 'yyyy-MM-dd');
     if (runDates.has(d)) {
       streak++;
       if (i === 0 || i === current_streak) current_streak = streak;
     } else {
-      if (i === 0) { current_streak = 0; }
+      if (i === 0) current_streak = 0;
       break;
     }
   }
-  
-  // Longest streak
+
   const sortedDates = [...runDates].sort();
   let maxStreak = 0;
   let curStreak = 0;
@@ -66,7 +65,7 @@ export function calculateStatsFromRuns(runs: Run[], unit: DistanceUnit): RunStat
     }
     prevDate = d;
   }
-  longest_streak = Math.max(maxStreak, curStreak);
+  const longest_streak = Math.max(maxStreak, curStreak);
 
   return {
     total_distance,
@@ -92,19 +91,21 @@ export function calculateWeeklyMileage(
 ): { week: string; miles: number }[] {
   const result: { week: string; miles: number }[] = [];
   const today = endDate ? parseISO(endDate) : new Date();
-  
+
   for (let i = weeks - 1; i >= 0; i--) {
     const end = subDays(today, i * 7);
     const weekStart = startOfWeek(end, { weekStartsOn: 1 });
     const weekEnd = endOfWeek(end, { weekStartsOn: 1 });
     const s = format(weekStart, 'yyyy-MM-dd');
     const e = format(weekEnd, 'yyyy-MM-dd');
-    
-    // Skip weeks outside the date range if specified
+
     if (startDate && e < startDate) continue;
     if (endDate && s > endDate) continue;
-    
-    const weekRuns = runs.filter(r => r.date >= s && r.date <= e);
+
+    const weekRuns = runs.filter(r => {
+      const d = extractDate(r.date);
+      return d >= s && d <= e;
+    });
     const miles = weekRuns.reduce(
       (sum, r) => sum + convertDistance(r.distance_value, r.distance_unit, unit),
       0,
@@ -126,17 +127,17 @@ export function calculateRunTypeBreakdown(
   let filteredRuns = runs;
   if (startDate || endDate) {
     filteredRuns = runs.filter(r => {
-      if (startDate && r.date < startDate) return false;
-      if (endDate && r.date > endDate) return false;
+      const d = extractDate(r.date);
+      if (startDate && d < startDate) return false;
+      if (endDate && d > endDate) return false;
       return true;
     });
   }
-  
+
   const map: Record<string, number> = {};
   for (const r of filteredRuns) {
-    const d = convertDistance(r.distance_value, r.distance_unit, unit);
-    map[r.run_type] = (map[r.run_type] ?? 0) + d;
+    const dist = convertDistance(r.distance_value, r.distance_unit, unit);
+    map[r.run_type] = (map[r.run_type] ?? 0) + dist;
   }
   return Object.entries(map).map(([type, miles]) => ({ type, miles: parseFloat(miles.toFixed(1)) }));
 }
-

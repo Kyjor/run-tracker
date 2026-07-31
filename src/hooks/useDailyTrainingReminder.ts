@@ -139,8 +139,8 @@ export function useDailyTrainingReminder() {
     void requestNotificationPermission().then(({ granted, needsSettings }) => {
       if (!granted) {
         if (needsSettings) {
-          console.warn('[Notifications] Permission was previously denied. User must enable in iOS Settings > Run With Friends > Notifications');
-          showToast('Notification permission denied. Enable in Settings > Run With Friends > Notifications', 'info');
+          console.warn('[Notifications] Permission was previously denied. User must enable in iOS Settings > Run 4 Fun > Notifications');
+          showToast('Notification permission denied. Enable in Settings > Run 4 Fun > Notifications', 'info');
         } else {
           console.warn('[Notifications] Permission not granted; reminders will use in-app toasts');
         }

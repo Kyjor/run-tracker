@@ -37,6 +37,15 @@
 	<true/>
 	<key>NSHealthShareUsageDescription</key>
 	<string>Run 4 Fun reads your workouts to import runs and health metrics.</string>
+	<key>GADApplicationIdentifier</key>
+	<string>ca-app-pub-3940256099942544~1458002511</string>
+	<key>SKAdNetworkItems</key>
+	<array>
+		<dict>
+			<key>SKAdNetworkIdentifier</key>
+			<string>cstr6suwn9.skadnetwork</string>
+		</dict>
+	</array>
 	<key>NSHealthUpdateUsageDescription</key>
 	<string>Run 4 Fun can write runs back to Apple Health.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>

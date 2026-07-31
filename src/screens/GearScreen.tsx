@@ -25,9 +25,9 @@ import {
 import { syncToCloud } from '../services/syncService';
 import { convertDistance, formatDistance } from '../utils/paceUtils';
 
-const TYPE_OPTIONS = (Object.entries(GEAR_TYPE_LABELS) as [GearType, string][]).map(
-  ([value, label]) => ({ value, label }),
-);
+const TYPE_OPTIONS = (Object.entries(GEAR_TYPE_LABELS) as [GearType, string][])
+  .filter(([value]) => value !== 'bike')
+  .map(([value, label]) => ({ value, label }));
 
 export function GearScreen() {
   const db = useDb();
@@ -50,6 +50,10 @@ export function GearScreen() {
   const [formPurchase, setFormPurchase] = useState('');
   const [formNotes, setFormNotes] = useState('');
   const [formThreshold, setFormThreshold] = useState(String(DEFAULT_SHOE_ALERT_MI));
+  const [formStarting, setFormStarting] = useState('');
+
+  const unitLabel = settings.units === 'km' ? 'km' : 'mi';
+  const showMileageFields = formType === 'shoes' || editing?.type === 'shoes';
 
   const load = useCallback(async () => {
     if (!db) return;
@@ -72,7 +76,8 @@ export function GearScreen() {
     setFormModel('');
     setFormPurchase('');
     setFormNotes('');
-    setFormThreshold(String(DEFAULT_SHOE_ALERT_MI));
+    setFormThreshold(String(Math.round(convertDistance(DEFAULT_SHOE_ALERT_MI, 'mi', settings.units) * 10) / 10));
+    setFormStarting('');
     setModalOpen(true);
   }
 
@@ -84,7 +89,13 @@ export function GearScreen() {
     setFormModel(g.model ?? '');
     setFormPurchase(g.purchase_date ?? '');
     setFormNotes(g.notes);
-    setFormThreshold(String(g.alert_threshold_mi ?? DEFAULT_SHOE_ALERT_MI));
+    setFormThreshold(
+      g.alert_threshold_mi != null
+        ? String(Math.round(convertDistance(g.alert_threshold_mi, 'mi', settings.units) * 10) / 10)
+        : String(Math.round(convertDistance(DEFAULT_SHOE_ALERT_MI, 'mi', settings.units) * 10) / 10),
+    );
+    const startingInUnit = convertDistance(g.starting_distance_mi ?? 0, 'mi', settings.units);
+    setFormStarting(startingInUnit > 0 ? String(Math.round(startingInUnit * 10) / 10) : '');
     setModalOpen(true);
   }
 
@@ -92,9 +103,16 @@ export function GearScreen() {
     if (!db || !formName.trim()) return;
     setSaving(true);
     try {
-      const threshold = formType === 'shoes'
-        ? (parseFloat(formThreshold) || DEFAULT_SHOE_ALERT_MI)
+      const thresholdParsed = parseFloat(formThreshold);
+      const threshold = formType === 'shoes' || editing?.type === 'shoes'
+        ? (Number.isFinite(thresholdParsed) && thresholdParsed > 0
+          ? convertDistance(thresholdParsed, settings.units, 'mi')
+          : DEFAULT_SHOE_ALERT_MI)
         : null;
+      const startingParsed = parseFloat(formStarting);
+      const startingMi = Number.isFinite(startingParsed) && startingParsed > 0
+        ? convertDistance(startingParsed, settings.units, 'mi')
+        : 0;
 
       if (editing) {
         await updateGear(db, editing.id, {
@@ -104,6 +122,7 @@ export function GearScreen() {
           purchase_date: formPurchase || null,
           notes: formNotes,
           alert_threshold_mi: threshold,
+          ...(showMileageFields ? { starting_distance_mi: startingMi } : {}),
         });
         showToast('Gear updated', 'success');
       } else {
@@ -115,6 +134,7 @@ export function GearScreen() {
           purchase_date: formPurchase || null,
           notes: formNotes,
           alert_threshold_mi: threshold,
+          starting_distance_mi: showMileageFields ? startingMi : 0,
         });
         showToast('Gear added', 'success');
       }
@@ -292,9 +312,18 @@ export function GearScreen() {
           <Input label="Brand" value={formBrand} onChange={e => setFormBrand(e.target.value)} placeholder="Nike" />
           <Input label="Model" value={formModel} onChange={e => setFormModel(e.target.value)} />
           <Input label="Purchase date" type="date" value={formPurchase} onChange={e => setFormPurchase(e.target.value)} />
+          {showMileageFields && (
+            <Input
+              label={`Starting mileage (${unitLabel})`}
+              type="number"
+              value={formStarting}
+              onChange={e => setFormStarting(e.target.value)}
+              placeholder="0"
+            />
+          )}
           {(formType === 'shoes' || editing?.type === 'shoes') && (
             <Input
-              label="Alert threshold (miles)"
+              label={`Alert threshold (${unitLabel})`}
               type="number"
               value={formThreshold}
               onChange={e => setFormThreshold(e.target.value)}

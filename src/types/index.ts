@@ -235,6 +235,8 @@ export interface Gear {
   retired_at: string | null;
   /** Shoe replacement threshold in miles */
   alert_threshold_mi: number | null;
+  /** Miles already on the gear before tracking in-app (not brand new) */
+  starting_distance_mi: number;
   created_at: string;
   updated_at: string;
   sync_status: SyncStatus;
@@ -283,6 +285,15 @@ export interface AppSettings {
   daily_reminder_enabled?: boolean;
   /** Local time string "HH:mm" for daily reminder. */
   daily_reminder_time?: string;
+  /** When true, home banner (and future ads) are hidden — set by Remove Ads IAP. */
+  ads_removed?: boolean;
+  /** User-defined personal best distances (builtins always shown separately). */
+  custom_pb_distances?: Array<{
+    id: string;
+    label: string;
+    meters: number;
+    builtin: boolean;
+  }>;
 }
 
 export const DEFAULT_APP_SETTINGS: AppSettings = {
@@ -295,6 +306,8 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   max_heart_rate_bpm: 190,
   daily_reminder_enabled: false,
   daily_reminder_time: '08:00',
+  ads_removed: false,
+  custom_pb_distances: [],
 };
 
 // ============================================================
@@ -414,6 +427,10 @@ export interface FullBackup {
   active_plan: ActivePlan | null;
   runs: Run[];
   goals: Goal[];
+  gear?: Gear[];
+  run_gear?: Array<{ run_id: string; gear_id: string }>;
+  run_routes?: Array<{ id: string; run_id: string; points_json: string; created_at: string }>;
+  gear_defaults?: Array<{ gear_type: string; gear_id: string }>;
 }
 
 export interface RunCsvRow {
@@ -483,103 +500,6 @@ export interface FitImportResult {
   run_id?: string;
   status: 'imported' | 'skipped_duplicate' | 'failed';
   message?: string;
-}
-
-// ============================================================
-// Nutrition Models
-// ============================================================
-
-export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack';
-
-export interface Food {
-  id: string;
-  name: string;
-  brand: string | null;
-  calories_per_100g: number;
-  protein_per_100g: number;
-  carbs_per_100g: number;
-  fats_per_100g: number;
-  fiber_per_100g: number;
-  is_custom: number;
-  created_at: string;
-  updated_at: string;
-  sync_status: SyncStatus;
-}
-
-export interface Meal {
-  id: string;
-  date: string;
-  meal_type: MealType;
-  food_id: string;
-  amount_grams: number;
-  created_at: string;
-  sync_status: SyncStatus;
-}
-
-export interface MealWithFood extends Meal {
-  food: Food;
-  calories: number;
-  protein: number;
-  carbs: number;
-  fats: number;
-  fiber: number;
-}
-
-export interface WeightEntry {
-  id: string;
-  date: string;
-  weight_kg: number;
-  body_fat_percent: number | null;
-  source: 'manual' | 'healthkit';
-  created_at: string;
-  sync_status: SyncStatus;
-}
-
-export type NutritionGoalType = 'lose' | 'maintain' | 'gain';
-
-export interface NutritionGoal {
-  id: string;
-  target_calories: number | null;
-  target_protein_g: number | null;
-  target_carbs_g: number | null;
-  target_fats_g: number | null;
-  goal_type: NutritionGoalType;
-  start_date: string;
-  end_date: string | null;
-  is_active: number;
-  created_at: string;
-  updated_at: string;
-  sync_status: SyncStatus;
-}
-
-export interface DailyNutrition {
-  date: string;
-  calories: number;
-  protein: number;
-  carbs: number;
-  fats: number;
-  fiber: number;
-  meals: MealWithFood[];
-}
-
-export interface TDEEEstimate {
-  tdee: number;
-  bmr: number;
-  activity_factor: number;
-  confidence: 'low' | 'medium' | 'high';
-  data_points: number;
-  date_range: {
-    start: string;
-    end: string;
-  };
-}
-
-export interface MacroRecommendation {
-  calories: number;
-  protein: number;
-  carbs: number;
-  fats: number;
-  rationale: string;
 }
 
 // ============================================================

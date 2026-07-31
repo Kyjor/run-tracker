@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import type { AppSettings } from '../types';
 import { DEFAULT_APP_SETTINGS } from '../types';
 import { loadSettings, saveSettings } from '../services/settingsService';
@@ -20,6 +20,8 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   const { db, isReady } = useDatabase();
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_APP_SETTINGS);
   const [isLoaded, setIsLoaded] = useState(false);
+  const settingsRef = useRef(settings);
+  settingsRef.current = settings;
 
   useEffect(() => {
     if (!db || !isReady) return;
@@ -28,6 +30,42 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
       setIsLoaded(true);
     });
   }, [db, isReady]);
+
+  const updateSettings = useCallback(async (updates: Partial<AppSettings>) => {
+    if (!db) return;
+    const next = { ...settingsRef.current, ...updates };
+    setSettings(next);
+    await saveSettings(db, updates);
+  }, [db]);
+
+  // Restore Remove Ads entitlement from the store when possible
+  useEffect(() => {
+    if (!isLoaded || !db) return;
+    if (settingsRef.current.ads_removed) return;
+
+    let unsub: (() => void) | undefined;
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        const { syncAdsRemovedFromStore, listenForRemoveAdsPurchases } = await import('../native/iap');
+        const owned = await syncAdsRemovedFromStore();
+        if (!cancelled && owned) {
+          await updateSettings({ ads_removed: true });
+        }
+        unsub = await listenForRemoveAdsPurchases(async () => {
+          await updateSettings({ ads_removed: true });
+        });
+      } catch {
+        /* store unavailable in web/dev */
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      unsub?.();
+    };
+  }, [isLoaded, db, updateSettings]);
 
   // Apply dark mode class to document (+ listen for system changes)
   useEffect(() => {
@@ -45,13 +83,6 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     return () => mq.removeEventListener('change', handler);
   }, [settings.dark_mode]);
 
-  const updateSettings = useCallback(async (updates: Partial<AppSettings>) => {
-    if (!db) return;
-    const next = { ...settings, ...updates };
-    setSettings(next);
-    await saveSettings(db, updates);
-  }, [db, settings]);
-
   return (
     <SettingsContext.Provider value={{ settings, updateSettings, isLoaded }}>
       {children}
@@ -62,4 +93,3 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
 export function useSettings(): SettingsContextValue {
   return useContext(SettingsContext);
 }
-

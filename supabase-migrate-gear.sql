@@ -13,10 +13,14 @@ CREATE TABLE IF NOT EXISTS user_gear (
   is_active BOOLEAN NOT NULL DEFAULT true,
   retired_at TIMESTAMPTZ,
   alert_threshold_mi REAL,
+  starting_distance_mi REAL NOT NULL DEFAULT 0,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE(user_id, id)
 );
+
+-- For existing deployments that already created user_gear without this column:
+ALTER TABLE user_gear ADD COLUMN IF NOT EXISTS starting_distance_mi REAL NOT NULL DEFAULT 0;
 
 CREATE TABLE IF NOT EXISTS user_run_gear (
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,

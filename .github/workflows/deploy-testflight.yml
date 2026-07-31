@@ -120,6 +120,18 @@ jobs:
           printf '%s' "$APP_STORE_CONNECT_API_KEY_CONTENT" > "$KEY_PATH"
           echo "APPLE_API_KEY_PATH=$KEY_PATH" >> "$GITHUB_ENV"
 
+      - name: Install CocoaPods dependencies
+        run: |
+          if ! command -v pod >/dev/null 2>&1; then
+            gem install cocoapods --user-install
+            POD_BIN="$(ls -d "$HOME"/.local/share/gem/ruby/*/bin/pod 2>/dev/null | sort -V | tail -1 || true)"
+            if [ -n "$POD_BIN" ]; then
+              echo "$(dirname "$POD_BIN")" >> "$GITHUB_PATH"
+            fi
+          fi
+          cd src-tauri/gen/apple
+          pod install
+
       - name: Build Tauri iOS (release)
         run: npx tauri ios build --export-method app-store-connect
         env:

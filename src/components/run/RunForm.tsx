@@ -5,7 +5,7 @@ import { Input, Textarea } from '../ui/Input';
 import { Select } from '../ui/Select';
 import { Button } from '../ui/Button';
 import { GearPicker } from '../gear/GearPicker';
-import { today, extractDate, dateToDatetime } from '../../utils/dateUtils';
+import { today, extractDate } from '../../utils/dateUtils';
 import { formatPace, calcPaceSeconds } from '../../utils/paceUtils';
 import { parseISO, format } from 'date-fns';
 import { useSettings } from '../../contexts/SettingsContext';
@@ -146,7 +146,7 @@ export function RunForm({ initialDate, prefillPlanDay, existingRun, onSubmit, is
     e.preventDefault();
     if (!validate()) return;
 
-    const datetime = dateToDatetime(values.date, `${values.time}:00Z`);
+    const datetime = new Date(`${values.date}T${values.time}:00`).toISOString();
 
     await onSubmit({
       date: datetime,

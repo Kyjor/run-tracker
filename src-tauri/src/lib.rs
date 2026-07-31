@@ -86,6 +86,12 @@ extern "C" {
 
     #[link_name = "hrm_is_connected"]
     fn hrm_ffi_is_connected() -> bool;
+
+    #[link_name = "admob_show_home_banner"]
+    fn admob_ffi_show_home_banner(ad_unit_id: *const std::ffi::c_char) -> i32;
+
+    #[link_name = "admob_hide_home_banner"]
+    fn admob_ffi_hide_home_banner() -> i32;
 }
 
 // ---------------------------------------------------------------------------
@@ -497,6 +503,39 @@ async fn hrm_is_connected() -> bool {
     }
 }
 
+/// Show the home-screen AdMob banner (iOS). No-op when SDK is not linked.
+#[tauri::command]
+async fn show_home_ad_banner(ad_unit_id: String) -> Result<(), String> {
+    #[cfg(target_os = "ios")]
+    {
+        let c = std::ffi::CString::new(ad_unit_id).map_err(|e| e.to_string())?;
+        let code = unsafe { admob_ffi_show_home_banner(c.as_ptr()) };
+        if code != 0 {
+            return Err(format!("show_home_ad_banner failed: {code}"));
+        }
+        Ok(())
+    }
+    #[cfg(not(target_os = "ios"))]
+    {
+        let _ = ad_unit_id;
+        Ok(())
+    }
+}
+
+/// Hide the home-screen AdMob banner.
+#[tauri::command]
+async fn hide_home_ad_banner() -> Result<(), String> {
+    #[cfg(target_os = "ios")]
+    {
+        let _ = unsafe { admob_ffi_hide_home_banner() };
+        Ok(())
+    }
+    #[cfg(not(target_os = "ios"))]
+    {
+        Ok(())
+    }
+}
+
 fn stage_fit_file_from_url(url: &tauri::Url) -> Option<PendingFitFile> {
     if url.scheme() != "file" {
         return None;
@@ -557,6 +596,7 @@ pub fn run() {
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_sql::Builder::new().build())
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_iap::init())
         .setup(|app| {
             APP_HANDLE.set(app.handle().clone()).ok();
             #[cfg(target_os = "ios")]
@@ -579,6 +619,8 @@ pub fn run() {
             hrm_start_scan,
             hrm_stop_scan,
             hrm_is_connected,
+            show_home_ad_banner,
+            hide_home_ad_banner,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");

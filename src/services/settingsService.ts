@@ -24,6 +24,16 @@ export async function loadSettings(db: Database): Promise<AppSettings> {
 
   const maxHR = map['max_heart_rate_bpm'] ? parseInt(map['max_heart_rate_bpm'], 10) : DEFAULT_APP_SETTINGS.max_heart_rate_bpm;
 
+  let custom_pb_distances: AppSettings['custom_pb_distances'] = [];
+  if (map['custom_pb_distances']) {
+    try {
+      const parsed = JSON.parse(map['custom_pb_distances']);
+      if (Array.isArray(parsed)) custom_pb_distances = parsed;
+    } catch {
+      custom_pb_distances = [];
+    }
+  }
+
   return {
     units,
     dark_mode: (map['dark_mode'] as DarkModePreference) ?? DEFAULT_APP_SETTINGS.dark_mode,
@@ -34,6 +44,8 @@ export async function loadSettings(db: Database): Promise<AppSettings> {
     max_heart_rate_bpm: isNaN(maxHR) ? DEFAULT_APP_SETTINGS.max_heart_rate_bpm : maxHR,
     daily_reminder_enabled: map['daily_reminder_enabled'] === 'true',
     daily_reminder_time: map['daily_reminder_time'] ?? DEFAULT_APP_SETTINGS.daily_reminder_time,
+    ads_removed: map['ads_removed'] === 'true',
+    custom_pb_distances,
   };
 }
 
@@ -46,8 +58,8 @@ export async function saveSetting(db: Database, key: string, value: string): Pro
 
 export async function saveSettings(db: Database, settings: Partial<AppSettings>): Promise<void> {
   for (const [k, v] of Object.entries(settings)) {
-    if (k === 'pace_zones') {
-      await saveSetting(db, 'pace_zones', JSON.stringify(v));
+    if (k === 'pace_zones' || k === 'custom_pb_distances') {
+      await saveSetting(db, k, JSON.stringify(v));
     } else {
       await saveSetting(db, k, String(v));
     }

@@ -15,7 +15,7 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "C78E8C83CBD428F23C18BA36"
-               BuildableName = "Run With Friends.app"
+               BuildableName = "Run 4 Fun.app"
                BlueprintName = "run-with-friends_iOS"
                ReferencedContainer = "container:run-with-friends.xcodeproj">
             </BuildableReference>
@@ -31,7 +31,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "C78E8C83CBD428F23C18BA36"
-            BuildableName = "Run With Friends.app"
+            BuildableName = "Run 4 Fun.app"
             BlueprintName = "run-with-friends_iOS"
             ReferencedContainer = "container:run-with-friends.xcodeproj">
          </BuildableReference>
@@ -66,7 +66,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "C78E8C83CBD428F23C18BA36"
-            BuildableName = "Run With Friends.app"
+            BuildableName = "Run 4 Fun.app"
             BlueprintName = "run-with-friends_iOS"
             ReferencedContainer = "container:run-with-friends.xcodeproj">
          </BuildableReference>
@@ -95,7 +95,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "C78E8C83CBD428F23C18BA36"
-            BuildableName = "Run With Friends.app"
+            BuildableName = "Run 4 Fun.app"
             BlueprintName = "run-with-friends_iOS"
             ReferencedContainer = "container:run-with-friends.xcodeproj">
          </BuildableReference>

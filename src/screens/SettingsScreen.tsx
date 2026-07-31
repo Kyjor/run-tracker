@@ -26,6 +26,13 @@ import { parseISO } from 'date-fns';
 import type { PaceZones, PaceZoneType } from '../types';
 import { PACE_ZONE_LABELS } from '../types';
 import { formatPaceFromSeconds, parsePaceString } from '../utils/workoutUtils';
+import {
+  fetchRemoveAdsProduct,
+  isDevMockAllowed,
+  mockRemoveAds,
+  purchaseRemoveAds,
+  restoreRemoveAds,
+} from '../native/iap';
 
 export function SettingsScreen() {
   const navigate = useNavigate();
@@ -34,6 +41,8 @@ export function SettingsScreen() {
   const { user, signOut } = useAuth();
   const { showToast } = useToast();
 
+  const [removeAdsPrice, setRemoveAdsPrice] = useState('$2.99');
+  const [iapBusy, setIapBusy] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [restoring, setRestoring] = useState(false);
@@ -49,7 +58,7 @@ export function SettingsScreen() {
       setNotificationStatus(status as 'granted' | 'denied' | 'default' | 'unknown');
       if (!granted) {
         if (needsSettings) {
-          showToast('Permission was denied. Go to Settings > Run With Friends > Notifications to enable.', 'info');
+          showToast('Permission was denied. Go to Settings > Run 4 Fun > Notifications to enable.', 'info');
         } else {
           showToast('Notification permission denied. Reminders will use in-app notifications.', 'info');
         }
@@ -68,6 +77,12 @@ export function SettingsScreen() {
       showToast('Failed to request notification permission', 'error');
     }
   }
+
+  useEffect(() => {
+    void fetchRemoveAdsProduct().then((p) => {
+      if (p?.formattedPrice) setRemoveAdsPrice(p.formattedPrice);
+    });
+  }, []);
 
   // Check notification status on mount
   useEffect(() => {
@@ -387,13 +402,101 @@ export function SettingsScreen() {
           </Card>
         </div>
 
+        {/* Ads */}
+        <div>
+          <SectionHeader title="Ads" />
+          <Card className="flex flex-col gap-3">
+            {settings.ads_removed ? (
+              <p className="text-sm text-gray-600 dark:text-gray-300">
+                Ads removed on this device. Thank you!
+              </p>
+            ) : (
+              <>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  One-time purchase to hide the home banner forever on this device.
+                </p>
+                <Button
+                  disabled={iapBusy}
+                  isLoading={iapBusy}
+                  onClick={async () => {
+                    setIapBusy(true);
+                    try {
+                      const res = await purchaseRemoveAds();
+                      if (res.ok && res.pending) {
+                        showToast('Payment pending…', 'info');
+                      } else if (res.ok) {
+                        await updateSettings({ ads_removed: true });
+                        showToast('Ads removed — thank you!', 'success');
+                      } else if (res.reason === 'canceled') {
+                        showToast('Purchase canceled', 'info');
+                      } else if (res.reason === 'iap_unavailable') {
+                        showToast('Store billing unavailable on this build', 'error');
+                      } else {
+                        showToast(res.reason, 'error');
+                      }
+                    } finally {
+                      setIapBusy(false);
+                    }
+                  }}
+                >
+                  Remove Ads · {removeAdsPrice}
+                </Button>
+                <Button
+                  variant="secondary"
+                  disabled={iapBusy}
+                  onClick={async () => {
+                    setIapBusy(true);
+                    try {
+                      const res = await restoreRemoveAds();
+                      if (res.ok) {
+                        await updateSettings({ ads_removed: true });
+                        showToast('Purchase restored', 'success');
+                      } else if (res.reason === 'not_found') {
+                        showToast('No purchase found for this Apple ID', 'info');
+                      } else {
+                        showToast(res.reason === 'iap_unavailable' ? 'Store billing unavailable' : res.reason, 'error');
+                      }
+                    } finally {
+                      setIapBusy(false);
+                    }
+                  }}
+                >
+                  Restore purchases
+                </Button>
+                {isDevMockAllowed() ? (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={iapBusy}
+                    onClick={async () => {
+                      await mockRemoveAds();
+                      await updateSettings({ ads_removed: true });
+                      showToast('Mock remove ads (dev only)', 'success');
+                    }}
+                  >
+                    Mock remove ads (dev)
+                  </Button>
+                ) : null}
+              </>
+            )}
+          </Card>
+        </div>
+
         {/* About */}
         <div>
           <SectionHeader title="About" />
           <Card>
             <p className="text-sm text-gray-500 dark:text-gray-400">
-              Run With Friends v0.1.0
+              Run 4 Fun v0.6.1
             </p>
+            <a
+              className="text-sm text-primary-600 dark:text-primary-400 mt-2 inline-block"
+              href="https://kyjor.github.io/run-tracker/privacy.html"
+              target="_blank"
+              rel="noreferrer"
+            >
+              Privacy Policy
+            </a>
           </Card>
         </div>
       </div>
