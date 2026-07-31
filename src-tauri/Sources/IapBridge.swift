@@ -76,7 +76,7 @@ private enum IapStore {
 private func runBlocking<T>(_ work: @escaping () async throws -> T) throws -> T {
     let sem = DispatchSemaphore(value: 0)
     var out: Result<T, Error>!
-    Task {
+    Task { @MainActor in
         do { out = .success(try await work()) }
         catch { out = .failure(error) }
         sem.signal()

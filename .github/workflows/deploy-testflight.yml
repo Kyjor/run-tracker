@@ -131,6 +131,12 @@ jobs:
           fi
           cd src-tauri/gen/apple
           pod install
+          echo "---- Pods OTHER_LDFLAGS (must not contain -ObjC) ----"
+          rg -n "OTHER_LDFLAGS" "Pods/Target Support Files/Pods-run-with-friends_iOS/" || true
+          if rg -q ' -ObjC' "Pods/Target Support Files/Pods-run-with-friends_iOS/"*.xcconfig; then
+            echo "error: -ObjC still present in Pods xcconfig; post_install failed"
+            exit 1
+          fi
 
       - name: Build Tauri iOS (release)
         run: npx tauri ios build --export-method app-store-connect
