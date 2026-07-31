@@ -92,6 +92,30 @@ extern "C" {
 
     #[link_name = "admob_hide_home_banner"]
     fn admob_ffi_hide_home_banner() -> i32;
+
+    #[link_name = "iap_fetch_remove_ads_product"]
+    fn iap_ffi_fetch_remove_ads_product(
+        result_ptr: *mut *mut std::ffi::c_char,
+        result_len: *mut usize,
+    ) -> i32;
+
+    #[link_name = "iap_purchase_remove_ads"]
+    fn iap_ffi_purchase_remove_ads(
+        result_ptr: *mut *mut std::ffi::c_char,
+        result_len: *mut usize,
+    ) -> i32;
+
+    #[link_name = "iap_restore_remove_ads"]
+    fn iap_ffi_restore_remove_ads(
+        result_ptr: *mut *mut std::ffi::c_char,
+        result_len: *mut usize,
+    ) -> i32;
+
+    #[link_name = "iap_is_remove_ads_owned"]
+    fn iap_ffi_is_remove_ads_owned(
+        result_ptr: *mut *mut std::ffi::c_char,
+        result_len: *mut usize,
+    ) -> i32;
 }
 
 // ---------------------------------------------------------------------------
@@ -536,6 +560,81 @@ async fn hide_home_ad_banner() -> Result<(), String> {
     }
 }
 
+#[cfg(target_os = "ios")]
+fn call_iap_ffi<F>(mut call: F) -> Result<String, String>
+where
+    F: FnMut(*mut *mut std::ffi::c_char, *mut usize) -> i32,
+{
+    let mut result_ptr: *mut std::ffi::c_char = std::ptr::null_mut();
+    let mut result_len: usize = 0;
+    let code = call(&mut result_ptr, &mut result_len);
+    let msg = take_ffi_json(result_ptr).unwrap_or_else(|_| "iap_unavailable".into());
+    if code < 0 {
+        return Err(msg);
+    }
+    Ok(msg)
+}
+
+#[tauri::command]
+async fn fetch_remove_ads_product() -> Result<serde_json::Value, String> {
+    #[cfg(target_os = "ios")]
+    {
+        let json = call_iap_ffi(|result_ptr, result_len| unsafe {
+            iap_ffi_fetch_remove_ads_product(result_ptr, result_len)
+        })?;
+        serde_json::from_str(&json).map_err(|e| e.to_string())
+    }
+    #[cfg(not(target_os = "ios"))]
+    {
+        Err("iap_unavailable".into())
+    }
+}
+
+#[tauri::command]
+async fn purchase_remove_ads() -> Result<String, String> {
+    #[cfg(target_os = "ios")]
+    {
+        call_iap_ffi(|result_ptr, result_len| unsafe {
+            iap_ffi_purchase_remove_ads(result_ptr, result_len)
+        })
+    }
+    #[cfg(not(target_os = "ios"))]
+    {
+        Err("iap_unavailable".into())
+    }
+}
+
+#[tauri::command]
+async fn restore_remove_ads() -> Result<serde_json::Value, String> {
+    #[cfg(target_os = "ios")]
+    {
+        let json = call_iap_ffi(|result_ptr, result_len| unsafe {
+            iap_ffi_restore_remove_ads(result_ptr, result_len)
+        })?;
+        serde_json::from_str(&json).map_err(|e| e.to_string())
+    }
+    #[cfg(not(target_os = "ios"))]
+    {
+        Err("iap_unavailable".into())
+    }
+}
+
+#[tauri::command]
+async fn is_remove_ads_owned() -> Result<bool, String> {
+    #[cfg(target_os = "ios")]
+    {
+        let json = call_iap_ffi(|result_ptr, result_len| unsafe {
+            iap_ffi_is_remove_ads_owned(result_ptr, result_len)
+        })?;
+        let v: serde_json::Value = serde_json::from_str(&json).map_err(|e| e.to_string())?;
+        Ok(v.get("owned").and_then(|x| x.as_bool()).unwrap_or(false))
+    }
+    #[cfg(not(target_os = "ios"))]
+    {
+        Ok(false)
+    }
+}
+
 fn stage_fit_file_from_url(url: &tauri::Url) -> Option<PendingFitFile> {
     if url.scheme() != "file" {
         return None;
@@ -596,7 +695,6 @@ pub fn run() {
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_sql::Builder::new().build())
         .plugin(tauri_plugin_notification::init())
-        .plugin(tauri_plugin_iap::init())
         .setup(|app| {
             APP_HANDLE.set(app.handle().clone()).ok();
             #[cfg(target_os = "ios")]
@@ -621,6 +719,10 @@ pub fn run() {
             hrm_is_connected,
             show_home_ad_banner,
             hide_home_ad_banner,
+            fetch_remove_ads_product,
+            purchase_remove_ads,
+            restore_remove_ads,
+            is_remove_ads_owned,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");

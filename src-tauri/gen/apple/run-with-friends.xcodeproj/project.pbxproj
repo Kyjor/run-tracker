@@ -17,6 +17,7 @@
 		9C0A0D338C02F9A20403E13B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = F8716191774CDF27BCDEC903 /* Assets.xcassets */; };
 		A011223344556677889900AA /* HRMBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = B011223344556677889900BB /* HRMBridge.swift */; };
 		A111223344556677889900AD /* AdBannerBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = B111223344556677889900AD /* AdBannerBridge.swift */; };
+		A211223344556677889900AE /* IapBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = B211223344556677889900AE /* IapBridge.swift */; };
 		AA11223344556677889900AA /* HealthKitBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB11223344556677889900BB /* HealthKitBridge.swift */; };
 		AA5E1AE878C969BAC9CEEC75 /* libPods-run-with-friends_iOS.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 97ADCA9892EAE9AAED2C106F /* libPods-run-with-friends_iOS.a */; };
 		C011223344556677889900CC /* CoreBluetooth.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D011223344556677889900DD /* CoreBluetooth.framework */; };
@@ -46,6 +47,7 @@
 		AB8FC300930C0BBDD4BE9DDD /* libapp.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; path = libapp.a; sourceTree = "<group>"; };
 		B011223344556677889900BB /* HRMBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HRMBridge.swift; sourceTree = SOURCE_ROOT; };
 		B111223344556677889900AD /* AdBannerBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdBannerBridge.swift; sourceTree = SOURCE_ROOT; };
+		B211223344556677889900AE /* IapBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IapBridge.swift; sourceTree = SOURCE_ROOT; };
 		B7D4454F691AA34FB04B2C6A /* bindings.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = bindings.h; sourceTree = "<group>"; };
 		BB11223344556677889900BB /* HealthKitBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthKitBridge.swift; sourceTree = SOURCE_ROOT; };
 		CC221A14E99790EB6CA82C88 /* QuartzCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = QuartzCore.framework; path = System/Library/Frameworks/QuartzCore.framework; sourceTree = SDKROOT; };
@@ -119,6 +121,7 @@
 				FF11223344556677889900FF /* LocationTrackingBridge.swift */,
 				B011223344556677889900BB /* HRMBridge.swift */,
 				B111223344556677889900AD /* AdBannerBridge.swift */,
+				B211223344556677889900AE /* IapBridge.swift */,
 				9867B8118D687766D1B3374A /* Pods */,
 			);
 			sourceTree = "<group>";
@@ -321,7 +324,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "if [ -f \"${SRCROOT}/Externals/.skip-rust-rebuild\" ]; then echo \"Skipping Rust rebuild\"; exit 0; fi\nnpm run -- tauri ios xcode-script -v --platform ${PLATFORM_DISPLAY_NAME:?} --sdk-root ${SDKROOT:?} --framework-search-paths \"${FRAMEWORK_SEARCH_PATHS:?}\" --header-search-paths \"${HEADER_SEARCH_PATHS:?}\" --gcc-preprocessor-definitions \"${GCC_PREPROCESSOR_DEFINITIONS:-}\" --configuration ${CONFIGURATION:?} ${FORCE_COLOR} ${ARCHS:?}";
+			shellScript = "npm run -- tauri ios xcode-script -v --platform ${PLATFORM_DISPLAY_NAME:?} --sdk-root ${SDKROOT:?} --framework-search-paths \"${FRAMEWORK_SEARCH_PATHS:?}\" --header-search-paths \"${HEADER_SEARCH_PATHS:?}\" --gcc-preprocessor-definitions \"${GCC_PREPROCESSOR_DEFINITIONS:-}\" --configuration ${CONFIGURATION:?} ${FORCE_COLOR} ${ARCHS:?}";
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -335,6 +338,7 @@
 				EE11223344556677889900EE /* LocationTrackingBridge.swift in Sources */,
 				A011223344556677889900AA /* HRMBridge.swift in Sources */,
 				A111223344556677889900AD /* AdBannerBridge.swift in Sources */,
+				A211223344556677889900AE /* IapBridge.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
