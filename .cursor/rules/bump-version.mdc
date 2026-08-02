@@ -1,0 +1,14 @@
+---
+description: Bump marketing version when making shippable app changes
+alwaysApply: true
+---
+
+# Version bumps
+
+When this session makes shippable app changes (not docs/CI/skills-only), bump the marketing version once before finishing:
+
+```bash
+python3 scripts/bump-version.py patch
+```
+
+Use `minor` for new features, `major` only if the user asks. Follow `.cursor/skills/bump-app-version/SKILL.md`. Do not change iOS `CFBundleVersion` (CI owns build numbers).

@@ -15,51 +15,11 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.6.1</string>
+	<string>0.6.2</string>
 	<key>CFBundleVersion</key>
-	<string>3</string>
-	<key>CFBundleDocumentTypes</key>
-	<array>
-		<dict>
-			<key>CFBundleTypeName</key>
-			<string>FIT Workout File</string>
-			<key>LSHandlerRank</key>
-			<string>Owner</string>
-			<key>LSItemContentTypes</key>
-			<array>
-				<string>com.runwithfriends.fit</string>
-			</array>
-		</dict>
-	</array>
-	<key>LSSupportsOpeningDocumentsInPlace</key>
-	<false/>
+	<integer>3</integer>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
-	<key>NSHealthShareUsageDescription</key>
-	<string>Run 4 Fun reads your workouts to import runs and health metrics.</string>
-	<key>GADApplicationIdentifier</key>
-	<string>ca-app-pub-3940256099942544~1458002511</string>
-	<key>SKAdNetworkItems</key>
-	<array>
-		<dict>
-			<key>SKAdNetworkIdentifier</key>
-			<string>cstr6suwn9.skadnetwork</string>
-		</dict>
-	</array>
-	<key>NSHealthUpdateUsageDescription</key>
-	<string>Run 4 Fun can write runs back to Apple Health.</string>
-	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>We use your location to reliably track runs even when the app is not in the foreground.</string>
-	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>We use your location to track runs and show your GPS route.</string>
-	<key>NSBluetoothAlwaysUsageDescription</key>
-	<string>Run 4 Fun connects to Bluetooth heart rate monitors during live runs.</string>
-	<key>NSBluetoothPeripheralUsageDescription</key>
-	<string>Run 4 Fun connects to Bluetooth heart rate monitors during live runs.</string>
-	<key>UIBackgroundModes</key>
-	<array>
-		<string>location</string>
-	</array>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIRequiredDeviceCapabilities</key>
@@ -79,28 +39,6 @@
 		<string>UIInterfaceOrientationPortraitUpsideDown</string>
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
-	</array>
-	<key>UTExportedTypeDeclarations</key>
-	<array>
-		<dict>
-			<key>UTTypeConformsTo</key>
-			<array>
-				<string>public.data</string>
-			</array>
-			<key>UTTypeDescription</key>
-			<string>FIT Workout File</string>
-			<key>UTTypeIdentifier</key>
-			<string>com.runwithfriends.fit</string>
-			<key>UTTypeTagSpecification</key>
-			<dict>
-				<key>public.filename-extension</key>
-				<array>
-					<string>fit</string>
-				</array>
-				<key>public.mime-type</key>
-				<string>application/octet-stream</string>
-			</dict>
-		</dict>
 	</array>
 </dict>
 </plist>
