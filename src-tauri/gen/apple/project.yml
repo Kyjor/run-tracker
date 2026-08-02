@@ -31,7 +31,11 @@ targets:
     sources:
       - path: Sources
       - path: Assets.xcassets
+      # Link via LIBRARY_SEARCH_PATHS + dependencies; do not copy .a into the app bundle.
       - path: Externals
+        buildPhase: none
+        excludes:
+          - "**/*"
       - path: run-with-friends_iOS
       - path: assets
         buildPhase: resources
@@ -52,7 +56,7 @@ targets:
           - UIInterfaceOrientationPortraitUpsideDown
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
-        CFBundleShortVersionString: "0.6.2"
+        CFBundleShortVersionString: "0.6.3"
         CFBundleVersion: 3
     entitlements:
       path: run-with-friends_iOS/run-with-friends_iOS.entitlements
@@ -84,7 +88,8 @@ targets:
       - sdk: UIKit.framework
       - sdk: WebKit.framework
     preBuildScripts:
-      - script: npm run -- tauri ios xcode-script -v --platform ${PLATFORM_DISPLAY_NAME:?} --sdk-root ${SDKROOT:?} --framework-search-paths "${FRAMEWORK_SEARCH_PATHS:?}" --header-search-paths "${HEADER_SEARCH_PATHS:?}" --gcc-preprocessor-definitions "${GCC_PREPROCESSOR_DEFINITIONS:-}" --configuration ${CONFIGURATION:?} ${FORCE_COLOR} ${ARCHS:?}
+      # Omit FORCE_COLOR: when set to 0 it is parsed as an invalid arch.
+      - script: npm run -- tauri ios xcode-script -v --platform ${PLATFORM_DISPLAY_NAME:?} --sdk-root ${SDKROOT:?} --framework-search-paths "${FRAMEWORK_SEARCH_PATHS:?}" --header-search-paths "${HEADER_SEARCH_PATHS:?}" --gcc-preprocessor-definitions "${GCC_PREPROCESSOR_DEFINITIONS:-}" --configuration ${CONFIGURATION:?} ${ARCHS:?}
         name: Build Rust Code
         basedOnDependencyAnalysis: false
         outputFiles:
