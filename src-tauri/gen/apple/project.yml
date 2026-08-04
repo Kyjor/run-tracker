@@ -30,6 +30,13 @@ targets:
     platform: iOS
     sources:
       - path: Sources
+      # Native bridges live at apple root (not under Sources/); must stay in the
+      # target or Rust @_cdecl imports fail at final link.
+      - path: HealthKitBridge.swift
+      - path: LocationTrackingBridge.swift
+      - path: HRMBridge.swift
+      - path: AdBannerBridge.swift
+      - path: IapBridge.swift
       - path: Assets.xcassets
       # Link via LIBRARY_SEARCH_PATHS + dependencies; do not copy .a into the app bundle.
       - path: Externals
@@ -87,6 +94,10 @@ targets:
       - sdk: Security.framework
       - sdk: UIKit.framework
       - sdk: WebKit.framework
+      - sdk: HealthKit.framework
+      - sdk: CoreLocation.framework
+      - sdk: StoreKit.framework
+      - sdk: CoreBluetooth.framework
     preBuildScripts:
       # Omit FORCE_COLOR: when set to 0 it is parsed as an invalid arch.
       - script: npm run -- tauri ios xcode-script -v --platform ${PLATFORM_DISPLAY_NAME:?} --sdk-root ${SDKROOT:?} --framework-search-paths "${FRAMEWORK_SEARCH_PATHS:?}" --header-search-paths "${HEADER_SEARCH_PATHS:?}" --gcc-preprocessor-definitions "${GCC_PREPROCESSOR_DEFINITIONS:-}" --configuration ${CONFIGURATION:?} ${ARCHS:?}
