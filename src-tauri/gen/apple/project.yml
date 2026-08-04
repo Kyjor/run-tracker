@@ -64,7 +64,7 @@ targets:
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
         CFBundleShortVersionString: "0.6.3"
-        CFBundleVersion: 3
+        CFBundleVersion: "3"
     entitlements:
       path: run-with-friends_iOS/run-with-friends_iOS.entitlements
     scheme:

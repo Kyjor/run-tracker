@@ -101,16 +101,6 @@ jobs:
             echo "VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY=${{ secrets.VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY }}"
           } > .env
 
-      - name: Set build number
-        run: |
-          BUILD_NUM=${{ github.run_number }}
-          PLIST="src-tauri/gen/apple/run-with-friends_iOS/Info.plist"
-          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUM" "$PLIST"
-          if [ -f src-tauri/gen/apple/project.yml ]; then
-            sed -i '' "s/CFBundleVersion: .*/CFBundleVersion: $BUILD_NUM/" src-tauri/gen/apple/project.yml
-          fi
-          echo "BUILD_NUMBER=$BUILD_NUM" >> "$GITHUB_ENV"
-
       - name: Place App Store Connect API key
         env:
           APP_STORE_CONNECT_API_KEY_CONTENT: ${{ secrets.APP_STORE_CONNECT_API_KEY_CONTENT }}
@@ -129,6 +119,8 @@ jobs:
           done
           # xcodegen ≥2.46 requires listed source paths to exist.
           mkdir -p "$APPLE/Externals" "$APPLE/assets"
+          BUILD_NUM=${{ github.run_number }}
+          sed -i '' "s/CFBundleVersion: .*/CFBundleVersion: \"$BUILD_NUM\"/" "$APPLE/project.yml"
           cd "$APPLE"
           env -u FORCE_COLOR xcodegen generate
           # Confirm bridges are compile sources (guards against another silent drop).
@@ -136,6 +128,11 @@ jobs:
             echo "error: HealthKitBridge.swift missing from Xcode Sources after xcodegen"
             exit 1
           fi
+          PLIST="run-with-friends_iOS/Info.plist"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUM" "$PLIST" \
+            || /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string $BUILD_NUM" "$PLIST"
+          echo "BUILD_NUMBER=$BUILD_NUM" >> "$GITHUB_ENV"
+          echo "Stamped CFBundleVersion=$BUILD_NUM"
 
       - name: Install CocoaPods dependencies
         run: |
@@ -175,11 +172,22 @@ jobs:
             find src-tauri/gen/apple/build -type f 2>/dev/null || true
             exit 1
           fi
-          echo "Uploading $IPA"
+          # Tauri/xcodegen can leave CFBundleVersion empty; ASC requires a build number.
+          IPA_ABS="$(cd "$(dirname "$IPA")" && pwd)/$(basename "$IPA")"
+          WORK="$(mktemp -d)"
+          unzip -q "$IPA_ABS" -d "$WORK"
+          APP="$(find "$WORK/Payload" -maxdepth 1 -name '*.app' -print -quit)"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUMBER" "$APP/Info.plist" \
+            || /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string $BUILD_NUMBER" "$APP/Info.plist"
+          echo "IPA CFBundleVersion=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP/Info.plist")"
+          rm -f "$IPA_ABS"
+          (cd "$WORK" && zip -qr "$IPA_ABS" Payload)
+          rm -rf "$WORK"
+          echo "Uploading $IPA_ABS"
           xcrun altool \
             --upload-app \
             --type ios \
-            --file "$IPA" \
+            --file "$IPA_ABS" \
             --apiKey "${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}" \
             --apiIssuer "${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}"
 
