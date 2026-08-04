@@ -200,7 +200,8 @@ jobs:
           codesign --force --sign "$DIST_ID" --entitlements "$ENTS" --timestamp "$APP"
           rm -f "$ENTS"
           rm -f "$IPA_ABS"
-          (cd "$WORK" && zip -qr "$IPA_ABS" Payload)
+          # Preserve SwiftSupport / Symbols — zipping only Payload triggers ITMS-90426.
+          (cd "$WORK" && zip -qr "$IPA_ABS" .)
           rm -rf "$WORK"
           echo "Uploading $IPA_ABS"
           xcrun altool \

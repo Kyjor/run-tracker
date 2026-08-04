@@ -20,6 +20,20 @@
 	<integer>3</integer>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSHealthShareUsageDescription</key>
+	<string>Run 4 Fun reads your Apple Health workouts so you can import runs into the app.</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>Run 4 Fun may write completed runs to Apple Health when you choose to save them.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Run 4 Fun uses your location to track your run route and distance while the app is open.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Run 4 Fun needs Always location access to keep tracking your run when the phone is locked or the app is in the background.</string>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>Run 4 Fun uses Bluetooth to connect to heart-rate monitors during runs.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>location</string>
+	</array>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIRequiredDeviceCapabilities</key>
