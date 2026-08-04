@@ -127,10 +127,12 @@ jobs:
           for f in HealthKitBridge.swift LocationTrackingBridge.swift HRMBridge.swift AdBannerBridge.swift IapBridge.swift; do
             cp "src-tauri/Sources/$f" "$APPLE/$f"
           done
+          # xcodegen ≥2.46 requires listed source paths to exist.
+          mkdir -p "$APPLE/Externals" "$APPLE/assets"
           cd "$APPLE"
           env -u FORCE_COLOR xcodegen generate
           # Confirm bridges are compile sources (guards against another silent drop).
-          if ! rg -q 'HealthKitBridge.swift in Sources' run-with-friends.xcodeproj/project.pbxproj; then
+          if ! grep -q 'HealthKitBridge.swift in Sources' run-with-friends.xcodeproj/project.pbxproj; then
             echo "error: HealthKitBridge.swift missing from Xcode Sources after xcodegen"
             exit 1
           fi
