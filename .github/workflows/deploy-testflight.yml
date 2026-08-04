@@ -91,6 +91,7 @@ jobs:
           echo "$PROFILE_BASE64" | base64 --decode > "$PROFILE_TMP"
           UUID="$(security cms -D -i "$PROFILE_TMP" | plutil -extract UUID raw -)"
           cp "$PROFILE_TMP" "$HOME/Library/MobileDevice/Provisioning Profiles/${UUID}.mobileprovision"
+          echo "PROFILE_UUID=$UUID" >> "$GITHUB_ENV"
           echo "Installed provisioning profile UUID=$UUID"
           rm -f "$PROFILE_TMP"
 
@@ -121,6 +122,7 @@ jobs:
           mkdir -p "$APPLE/Externals" "$APPLE/assets"
           BUILD_NUM=${{ github.run_number }}
           sed -i '' "s/CFBundleVersion: .*/CFBundleVersion: \"$BUILD_NUM\"/" "$APPLE/project.yml"
+          sed -i '' "s/CURRENT_PROJECT_VERSION: .*/CURRENT_PROJECT_VERSION: \"$BUILD_NUM\"/" "$APPLE/project.yml"
           cd "$APPLE"
           env -u FORCE_COLOR xcodegen generate
           # Confirm bridges are compile sources (guards against another silent drop).
@@ -129,7 +131,8 @@ jobs:
             exit 1
           fi
           PLIST="run-with-friends_iOS/Info.plist"
-          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUM" "$PLIST" \
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion string $BUILD_NUM" "$PLIST" 2>/dev/null \
+            || /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUM" "$PLIST" \
             || /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string $BUILD_NUM" "$PLIST"
           echo "BUILD_NUMBER=$BUILD_NUM" >> "$GITHUB_ENV"
           echo "Stamped CFBundleVersion=$BUILD_NUM"
@@ -172,7 +175,7 @@ jobs:
             find src-tauri/gen/apple/build -type f 2>/dev/null || true
             exit 1
           fi
-          # Tauri/xcodegen can leave CFBundleVersion empty; ASC requires a build number.
+          # Xcode may overwrite CFBundleVersion with marketing version / empty; stamp + re-sign.
           IPA_ABS="$(cd "$(dirname "$IPA")" && pwd)/$(basename "$IPA")"
           WORK="$(mktemp -d)"
           unzip -q "$IPA_ABS" -d "$WORK"
@@ -180,6 +183,22 @@ jobs:
           /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUMBER" "$APP/Info.plist" \
             || /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string $BUILD_NUMBER" "$APP/Info.plist"
           echo "IPA CFBundleVersion=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP/Info.plist")"
+          DIST_ID="$(security find-identity -v -p codesigning | awk -F'"' '/Apple Distribution/{print $2; exit}')"
+          if [ -z "$DIST_ID" ]; then
+            echo "No Apple Distribution identity"
+            security find-identity -v -p codesigning
+            exit 1
+          fi
+          cp "$HOME/Library/MobileDevice/Provisioning Profiles/${PROFILE_UUID}.mobileprovision" \
+            "$APP/embedded.mobileprovision"
+          ENTS="$(mktemp).plist"
+          codesign -d --entitlements :- "$APP" > "$ENTS" 2>/dev/null || \
+            cp src-tauri/gen/apple/run-with-friends_iOS/run-with-friends_iOS.entitlements "$ENTS"
+          while IFS= read -r -d '' item; do
+            codesign --force --sign "$DIST_ID" --timestamp "$item"
+          done < <(find "$APP" \( -name '*.framework' -o -name '*.dylib' \) -print0)
+          codesign --force --sign "$DIST_ID" --entitlements "$ENTS" --timestamp "$APP"
+          rm -f "$ENTS"
           rm -f "$IPA_ABS"
           (cd "$WORK" && zip -qr "$IPA_ABS" Payload)
           rm -rf "$WORK"

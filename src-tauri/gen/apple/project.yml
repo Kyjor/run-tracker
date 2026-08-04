@@ -74,6 +74,8 @@ targets:
     settings:
       base:
         ENABLE_BITCODE: false
+        CURRENT_PROJECT_VERSION: "3"
+        MARKETING_VERSION: "0.6.3"
         ARCHS: [arm64]
         VALID_ARCHS: arm64 
         # Non-arch-specific path required: Xcode 26 drops LIBRARY_SEARCH_PATHS[arch=*] for -lapp.
