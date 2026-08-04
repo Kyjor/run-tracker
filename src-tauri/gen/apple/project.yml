@@ -65,12 +65,29 @@ targets:
           - UIInterfaceOrientationLandscapeRight
         CFBundleShortVersionString: "0.6.3"
         CFBundleVersion: "3"
-        NSHealthShareUsageDescription: Run 4 Fun reads your Apple Health workouts so you can import runs into the app.
-        NSHealthUpdateUsageDescription: Run 4 Fun may write completed runs to Apple Health when you choose to save them.
-        NSLocationWhenInUseUsageDescription: Run 4 Fun uses your location to track your run route and distance while the app is open.
-        NSLocationAlwaysAndWhenInUseUsageDescription: Run 4 Fun needs Always location access to keep tracking your run when the phone is locked or the app is in the background.
-        NSBluetoothAlwaysUsageDescription: Run 4 Fun uses Bluetooth to connect to heart-rate monitors during runs.
+        # Required — GoogleMobileAds crashes on launch without this key.
+        GADApplicationIdentifier: ca-app-pub-3940256099942544~1458002511
+        SKAdNetworkItems:
+          - SKAdNetworkIdentifier: cstr6suwn9.skadnetwork
+        NSHealthShareUsageDescription: Run 4 Fun reads your workouts to import runs and health metrics.
+        NSHealthUpdateUsageDescription: Run 4 Fun can write runs back to Apple Health.
+        NSLocationWhenInUseUsageDescription: We use your location to track runs and show your GPS route.
+        NSLocationAlwaysAndWhenInUseUsageDescription: We use your location to reliably track runs even when the app is not in the foreground.
+        NSBluetoothAlwaysUsageDescription: Run 4 Fun connects to Bluetooth heart rate monitors during live runs.
+        NSBluetoothPeripheralUsageDescription: Run 4 Fun connects to Bluetooth heart rate monitors during live runs.
         UIBackgroundModes: [location]
+        LSSupportsOpeningDocumentsInPlace: false
+        CFBundleDocumentTypes:
+          - CFBundleTypeName: FIT Workout File
+            LSHandlerRank: Owner
+            LSItemContentTypes: [com.runwithfriends.fit]
+        UTExportedTypeDeclarations:
+          - UTTypeIdentifier: com.runwithfriends.fit
+            UTTypeDescription: FIT Workout File
+            UTTypeConformsTo: [public.data]
+            UTTypeTagSpecification:
+              public.filename-extension: [fit]
+              public.mime-type: application/octet-stream
     entitlements:
       path: run-with-friends_iOS/run-with-friends_iOS.entitlements
     scheme:

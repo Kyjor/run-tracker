@@ -4,6 +4,19 @@
 <dict>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>CFBundleDocumentTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>FIT Workout File</string>
+			<key>LSHandlerRank</key>
+			<string>Owner</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>com.runwithfriends.fit</string>
+			</array>
+		</dict>
+	</array>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -17,19 +30,32 @@
 	<key>CFBundleShortVersionString</key>
 	<string>0.6.3</string>
 	<key>CFBundleVersion</key>
-	<integer>3</integer>
+	<string>3</string>
+	<key>GADApplicationIdentifier</key>
+	<string>ca-app-pub-3940256099942544~1458002511</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
-	<key>NSHealthShareUsageDescription</key>
-	<string>Run 4 Fun reads your Apple Health workouts so you can import runs into the app.</string>
-	<key>NSHealthUpdateUsageDescription</key>
-	<string>Run 4 Fun may write completed runs to Apple Health when you choose to save them.</string>
-	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Run 4 Fun uses your location to track your run route and distance while the app is open.</string>
-	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>Run 4 Fun needs Always location access to keep tracking your run when the phone is locked or the app is in the background.</string>
+	<key>LSSupportsOpeningDocumentsInPlace</key>
+	<false/>
 	<key>NSBluetoothAlwaysUsageDescription</key>
-	<string>Run 4 Fun uses Bluetooth to connect to heart-rate monitors during runs.</string>
+	<string>Run 4 Fun connects to Bluetooth heart rate monitors during live runs.</string>
+	<key>NSBluetoothPeripheralUsageDescription</key>
+	<string>Run 4 Fun connects to Bluetooth heart rate monitors during live runs.</string>
+	<key>NSHealthShareUsageDescription</key>
+	<string>Run 4 Fun reads your workouts to import runs and health metrics.</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>Run 4 Fun can write runs back to Apple Health.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>We use your location to reliably track runs even when the app is not in the foreground.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>We use your location to track runs and show your GPS route.</string>
+	<key>SKAdNetworkItems</key>
+	<array>
+		<dict>
+			<key>SKAdNetworkIdentifier</key>
+			<string>cstr6suwn9.skadnetwork</string>
+		</dict>
+	</array>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>location</string>
@@ -53,6 +79,28 @@
 		<string>UIInterfaceOrientationPortraitUpsideDown</string>
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+	<key>UTExportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.data</string>
+			</array>
+			<key>UTTypeDescription</key>
+			<string>FIT Workout File</string>
+			<key>UTTypeIdentifier</key>
+			<string>com.runwithfriends.fit</string>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>fit</string>
+				</array>
+				<key>public.mime-type</key>
+				<string>application/octet-stream</string>
+			</dict>
+		</dict>
 	</array>
 </dict>
 </plist>

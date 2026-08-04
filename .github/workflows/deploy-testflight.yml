@@ -134,8 +134,12 @@ jobs:
           /usr/libexec/PlistBuddy -c "Set :CFBundleVersion string $BUILD_NUM" "$PLIST" 2>/dev/null \
             || /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUM" "$PLIST" \
             || /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string $BUILD_NUM" "$PLIST"
+          # AdMob aborts at process start if this key is missing.
+          if ! /usr/libexec/PlistBuddy -c 'Print :GADApplicationIdentifier' "$PLIST" >/dev/null 2>&1; then
+            /usr/libexec/PlistBuddy -c 'Add :GADApplicationIdentifier string ca-app-pub-3940256099942544~1458002511' "$PLIST"
+          fi
           echo "BUILD_NUMBER=$BUILD_NUM" >> "$GITHUB_ENV"
-          echo "Stamped CFBundleVersion=$BUILD_NUM"
+          echo "Stamped CFBundleVersion=$BUILD_NUM GAD=$(/usr/libexec/PlistBuddy -c 'Print :GADApplicationIdentifier' "$PLIST")"
 
       - name: Install CocoaPods dependencies
         run: |
