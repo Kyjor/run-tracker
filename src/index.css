@@ -5,6 +5,9 @@
 @layer base {
   * {
     -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
   }
   html {
     font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif;
@@ -14,6 +17,9 @@
   }
   input, textarea, select {
     @apply text-base; /* Prevent iOS zoom on focus */
+    -webkit-touch-callout: default;
+    -webkit-user-select: text;
+    user-select: text;
   }
 }
 
