@@ -79,6 +79,35 @@ export async function getRunsByDateRange(
   );
 }
 
+/** Paginated runs, optionally scoped to a date range (omit both for all-time). */
+export async function getRunsPaginated(
+  db: Database,
+  options: {
+    startDate?: string;
+    endDate?: string;
+    limit?: number;
+    offset?: number;
+  } = {},
+): Promise<Run[]> {
+  const limit = options.limit ?? 20;
+  const offset = options.offset ?? 0;
+  const { startDate, endDate } = options;
+
+  if (startDate && endDate) {
+    const startDatetime = startDate.includes('T') ? startDate : `${startDate}T00:00:00Z`;
+    const endDatetime = endDate.includes('T') ? endDate : `${endDate}T23:59:59Z`;
+    return db.select<Run[]>(
+      'SELECT * FROM runs WHERE date >= $1 AND date <= $2 ORDER BY date DESC, created_at DESC LIMIT $3 OFFSET $4',
+      [startDatetime, endDatetime, limit, offset],
+    );
+  }
+
+  return db.select<Run[]>(
+    'SELECT * FROM runs ORDER BY date DESC, created_at DESC LIMIT $1 OFFSET $2',
+    [limit, offset],
+  );
+}
+
 export async function getRunsForDate(db: Database, date: string): Promise<Run[]> {
   // Extract date portion from datetime for comparison
   // Use DATE() function or substring to match date portion
