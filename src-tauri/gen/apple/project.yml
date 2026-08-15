@@ -63,7 +63,7 @@ targets:
           - UIInterfaceOrientationPortraitUpsideDown
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
-        CFBundleShortVersionString: "0.6.4"
+        CFBundleShortVersionString: "0.7.0"
         CFBundleVersion: "3"
         # Required — GoogleMobileAds crashes on launch without this key.
         GADApplicationIdentifier: ca-app-pub-3940256099942544~1458002511
