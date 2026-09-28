@@ -2,7 +2,7 @@ name: run-with-friends
 options:
   bundleIdPrefix: com.runwithfriends.app
   deploymentTarget:
-    iOS: 14.0
+    iOS: 15.0
 fileGroups: [../../src]
 configs:
   debug: debug
@@ -52,6 +52,8 @@ targets:
       path: run-with-friends_iOS/Info.plist
       properties:
         LSRequiresIPhoneOS: true
+        # false = only exempt encryption (e.g. HTTPS); skips App Store Connect questionnaire.
+        ITSAppUsesNonExemptEncryption: false
         UILaunchStoryboardName: LaunchScreen
         UIRequiredDeviceCapabilities: [arm64, metal]
         UISupportedInterfaceOrientations:
@@ -63,7 +65,7 @@ targets:
           - UIInterfaceOrientationPortraitUpsideDown
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
-        CFBundleShortVersionString: "0.7.0"
+        CFBundleShortVersionString: "0.7.1"
         CFBundleVersion: "3"
         # Required — GoogleMobileAds crashes on launch without this key.
         GADApplicationIdentifier: ca-app-pub-3940256099942544~1458002511
