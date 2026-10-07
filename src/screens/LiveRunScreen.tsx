@@ -19,7 +19,7 @@ import { publishFeedActivity } from '../services/socialService';
 import { syncToCloud } from '../services/syncService';
 import { startHrmScan, stopHrmScan, isHrmConnected } from '../services/hrmService';
 import { generateId } from '../utils/generateId';
-import { formatDistance, formatDuration, formatPace, calcPaceSeconds } from '../utils/paceUtils';
+import { formatDuration, formatPace, calcPaceSeconds } from '../utils/paceUtils';
 import { buildHrZonesFromSummary } from '../utils/hrZones';
 import {
   getLiveRunSnapshot,
@@ -259,40 +259,50 @@ export function LiveRunScreen() {
       <Header title="Live Run" showBack={!isRunning} />
 
       {isRunning && (
-        <div className="relative mx-4 mt-2">
+        <div className="mx-4 mt-2">
           <RunRouteMap points={points} followLatest className="h-72 rounded-card" />
-          <div className="absolute bottom-3 left-3 right-3 flex gap-2">
-            <MetricPill label="Time" live={elapsedSeconds} format={(n) => formatDuration(Math.floor(n))} />
-            <MetricPill label={unit} live={distanceValue} format={(n) => formatDistance(n, unit)} />
-            <MetricPill label="Pace" value={formatPace(paceSeconds, unit)} />
-            {currentHr != null && (
-              <MetricPill label="HR" live={currentHr} format={(n) => `${Math.round(n)}`} />
-            )}
-          </div>
         </div>
       )}
 
       <div className="px-4 pt-4 flex flex-col gap-4">
-        {!isRunning && (
-          <FadeIn>
-            <Card>
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs uppercase tracking-wide text-ink-muted">Duration</p>
-                  <p className="text-2xl font-semibold tabular-nums">{formatDuration(elapsedSeconds)}</p>
-                </div>
-                <div>
-                  <p className="text-xs uppercase tracking-wide text-ink-muted">Distance</p>
-                  <p className="text-2xl font-semibold tabular-nums">{formatDistance(distanceValue, unit)}</p>
-                </div>
-                <div>
-                  <p className="text-xs uppercase tracking-wide text-ink-muted">Pace</p>
-                  <p className="text-2xl font-semibold tabular-nums">{formatPace(paceSeconds, unit)}</p>
-                </div>
+        <FadeIn>
+          <Card>
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0 flex-1 text-center">
+                <p className="text-xs uppercase tracking-wide text-ink-muted">Time</p>
+                <p className="text-2xl font-semibold tabular-nums text-ink-primary dark:text-ink-dark-primary">
+                  {isRunning
+                    ? <AnimatedNumber value={elapsedSeconds} format={(n) => formatDuration(Math.floor(n))} />
+                    : formatDuration(elapsedSeconds)}
+                </p>
               </div>
-            </Card>
-          </FadeIn>
-        )}
+              <div className="min-w-0 flex-1 text-center">
+                <p className="text-xs uppercase tracking-wide text-ink-muted">{unit}</p>
+                <p className="text-2xl font-semibold tabular-nums text-ink-primary dark:text-ink-dark-primary">
+                  {isRunning
+                    ? <AnimatedNumber value={distanceValue} format={(n) => n.toFixed(2)} />
+                    : distanceValue.toFixed(2)}
+                </p>
+              </div>
+              <div className="min-w-0 flex-1 text-center">
+                <p className="text-xs uppercase tracking-wide text-ink-muted">Pace</p>
+                <p className="text-2xl font-semibold tabular-nums text-ink-primary dark:text-ink-dark-primary">
+                  {formatPace(paceSeconds, unit)}
+                </p>
+              </div>
+              {currentHr != null && (
+                <div className="min-w-0 flex-1 text-center">
+                  <p className="text-xs uppercase tracking-wide text-ink-muted">HR</p>
+                  <p className="text-2xl font-semibold tabular-nums text-ink-primary dark:text-ink-dark-primary">
+                    {isRunning
+                      ? <AnimatedNumber value={currentHr} format={(n) => `${Math.round(n)}`} />
+                      : Math.round(currentHr)}
+                  </p>
+                </div>
+              )}
+            </div>
+          </Card>
+        </FadeIn>
 
         <div className="flex flex-col gap-1 px-1">
           <p className="text-xs text-ink-secondary">
@@ -353,27 +363,6 @@ export function LiveRunScreen() {
           </div>
         </Card>
       </div>
-    </div>
-  );
-}
-
-function MetricPill({
-  label,
-  value,
-  live,
-  format,
-}: {
-  label: string;
-  value?: string;
-  live?: number;
-  format?: (n: number) => string;
-}) {
-  return (
-    <div className="flex-1 rounded-2xl bg-map-overlay backdrop-blur-md px-3 py-2 text-center">
-      <p className="text-[10px] uppercase tracking-wide text-white/70">{label}</p>
-      <p className="text-sm font-bold text-white tabular-nums">
-        {live != null && format ? <AnimatedNumber value={live} format={format} /> : value}
-      </p>
     </div>
   );
 }
