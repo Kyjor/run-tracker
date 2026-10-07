@@ -155,9 +155,14 @@ export function RunRouteMap({ points, className = '', followLatest = false, inte
       style: getMapStyle(isDarkRef.current),
       center: [-98, 39],
       zoom: 4,
-      attributionControl: interactive ? { compact: true } : false,
+      // Keep attribution off the bottom edge so live overlays / nearby UI stay readable.
+      attributionControl: false,
       interactive,
     });
+
+    if (interactive) {
+      map.addControl(new maplibregl.AttributionControl({ compact: true }), 'top-right');
+    }
 
     mapRef.current = map;
 
