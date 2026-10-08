@@ -198,6 +198,9 @@ const MIGRATIONS = [
 
   // v13 — Race day for the active plan
   `ALTER TABLE active_plan ADD COLUMN race_date TEXT`,
+
+  // v14 — Chosen stat visual shared with friends
+  `ALTER TABLE runs ADD COLUMN hero_json TEXT`,
 ];
 
 // ---------------------------------------------------------------------------

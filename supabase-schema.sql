@@ -63,6 +63,7 @@ CREATE TABLE IF NOT EXISTS user_runs (
   notes TEXT NOT NULL DEFAULT '',
   source TEXT NOT NULL DEFAULT 'manual' CHECK (source IN ('manual', 'healthkit', 'fit', 'live')),
   effort INTEGER,
+  hero_json TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE(user_id, id)

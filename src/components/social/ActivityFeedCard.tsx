@@ -6,6 +6,7 @@ import { Avatar } from '../ui/Avatar';
 import { MetricChip } from '../ui/MetricChip';
 import { CommentModal } from './CommentModal';
 import { RunRouteMap } from '../run/RunRouteMap';
+import { HeroVisualView } from '../run/HeroVisualView';
 import { formatRelativeTime } from '../../utils/dateUtils';
 import { parseISO } from 'date-fns';
 import { formatDistance, formatDuration, formatPace, calcPaceSeconds } from '../../utils/paceUtils';
@@ -131,7 +132,8 @@ export function ActivityFeedCard({ item, onLike, onCommentAdded }: ActivityFeedC
             className="w-full text-left"
             onClick={() => runId && navigate(`/runs/${runId}?userId=${item.user_id}`)}
           >
-            {hasRoute ? <LazyMap points={item.route_points} /> : <RoutePlaceholder />}
+            {item.hero && <HeroVisualView hero={item.hero} />}
+            {hasRoute ? <LazyMap points={item.route_points} /> : !item.hero ? <RoutePlaceholder /> : null}
           </button>
           <div className="px-4 py-3 flex gap-6 border-t border-border/60 dark:border-border-dark/60">
             {distance != null && <MetricChip label={unit} value={formatDistance(distance, unit)} />}

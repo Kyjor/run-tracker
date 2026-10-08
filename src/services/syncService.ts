@@ -177,6 +177,7 @@ async function pushDirtyRuns(db: Database, userId: string): Promise<void> {
       weather_condition: run.weather_condition,
       calories: run.calories,
       effort: run.effort,
+      hero_json: run.hero_json ?? null,
     });
     if (error) {
       console.error('Failed to sync run', run.id, error.message);
@@ -571,6 +572,12 @@ export async function pullFromCloud(db: Database): Promise<void> {
             calories=$25, effort=$26, created_at=$27, updated_at=$28, sync_status='synced'
            WHERE id=$29`,
           [...cols, run.id],
+        );
+      }
+      if (existing.length === 0 || existing[0].sync_status !== 'dirty') {
+        await db.execute(
+          'UPDATE runs SET hero_json = $1 WHERE id = $2',
+          [run.hero_json ?? null, run.id],
         );
       }
     }

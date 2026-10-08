@@ -5,6 +5,7 @@
 
 import { supabase } from './supabaseClient';
 import type { Profile, Follow, FeedItem, FeedComment, Run, TrainingPlan, PlanDay, RoutePoint } from '../types';
+import { parseHero } from '../utils/runHero';
 
 // ---------------------------------------------------------------------------
 // Profile
@@ -393,6 +394,7 @@ export async function getFeed(limit = 30, offset = 0): Promise<FeedItem[]> {
         comments_count: commentCount.get(actId) ?? 0,
         user_has_liked: userLiked.has(actId),
         route_points: routeMap.get(run.id),
+        hero: parseHero(run.hero_json),
       };
     });
 }

@@ -7,6 +7,7 @@ import { SegmentedControl } from '../components/ui/SegmentedControl';
 import { FadeIn } from '../components/motion/FadeIn';
 import { StaggerList, StaggerItem } from '../components/motion/StaggerList';
 import { MileageChart } from '../components/charts/MileageChart';
+import { ProgressCompare } from '../components/stats/ProgressCompare';
 import { RunTypeChart } from '../components/charts/RunTypeChart';
 import { RunCard } from '../components/run/RunCard';
 import { Spinner } from '../components/ui/Spinner';
@@ -115,6 +116,8 @@ export function StatsScreen() {
               <StatCell label="Longest Streak" value={`${stats.longest_streak} days`} />
             </div>
           </Card>
+
+          <ProgressCompare unit={settings.units} {...getDateRange(range)} />
 
           {/* Mileage chart */}
           {weeklyMileage.length > 0 && (

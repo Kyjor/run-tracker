@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { usePlan } from '../contexts/PlanContext';
 import { useSettings } from '../contexts/SettingsContext';
 import { useToast } from '../contexts/ToastContext';
-import { useDb } from '../contexts/DatabaseContext';
+import { useDatabase } from '../contexts/DatabaseContext';
 import { ACTIVITY_LABELS } from '../types';
 import { formatDistance } from '../utils/paceUtils';
 import { planDayToDate } from '../utils/dateUtils';
@@ -130,7 +130,7 @@ async function clearScheduledReminders() {
 
 export function useDailyTrainingReminder() {
   const { activePlan, isLoading } = usePlan();
-  const db = useDb();
+  const { db } = useDatabase();
   const { settings } = useSettings();
   const { showToast } = useToast();
 

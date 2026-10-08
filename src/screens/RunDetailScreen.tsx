@@ -14,7 +14,7 @@ import { useDb } from '../contexts/DatabaseContext';
 import { useSettings } from '../contexts/SettingsContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
-import { getRunById, getRouteForRun } from '../services/runService';
+import { getRunById, getRouteForRun, getRuns, mergeRuns, updateRun } from '../services/runService';
 import { assignGearToRun, getGearForRun } from '../services/gearService';
 import { syncToCloud } from '../services/syncService';
 import { mergeHealthKitMetricsIntoRun } from '../services/healthkitService';
@@ -22,8 +22,10 @@ import { getRunByUserAndId, getProfileById, getRouteForFriendRun } from '../serv
 import { FadeIn } from '../components/motion/FadeIn';
 import { RunDetailSocial } from '../components/social/RunDetailSocial';
 import { formatDistance, formatDuration, formatPace, calcPaceSeconds } from '../utils/paceUtils';
-import { formatLong } from '../utils/dateUtils';
+import { formatLong, formatShortWithTime } from '../utils/dateUtils';
 import { computeRouteSplits } from '../utils/routeSplits';
+import { buildHero, heroOptionsForRun, parseHero, type HeroOption } from '../utils/runHero';
+import { HeroVisualView } from '../components/run/HeroVisualView';
 
 export function RunDetailScreen() {
   const { id } = useParams<{ id: string }>();
@@ -45,6 +47,12 @@ export function RunDetailScreen() {
   const [gearEditOpen, setGearEditOpen] = useState(false);
   const [editGearIds, setEditGearIds] = useState<string[]>([]);
   const [savingGear, setSavingGear] = useState(false);
+  const [mergeOpen, setMergeOpen] = useState(false);
+  const [mergeCandidates, setMergeCandidates] = useState<Run[]>([]);
+  const [mergeSelected, setMergeSelected] = useState<string[]>([]);
+  const [mergingRuns, setMergingRuns] = useState(false);
+  const [heroOptions, setHeroOptions] = useState<HeroOption[]>([]);
+  const [savingHero, setSavingHero] = useState(false);
 
   async function reloadRun(runId: string) {
     const r = await getRunById(db, runId);
@@ -94,6 +102,11 @@ export function RunDetailScreen() {
     }
   }, [db, id, searchParams, user]);
 
+  useEffect(() => {
+    if (loading || isFriendRun || !run) return;
+    void heroOptionsForRun(db, run, routePoints, settings.units).then(setHeroOptions);
+  }, [db, loading, isFriendRun, run, routePoints, settings.units]);
+
   const splits = useMemo(() => {
     if (loading || isFriendRun || !run || !routePoints || routePoints.length < 2) return [];
     return computeRouteSplits(routePoints, settings.units);
@@ -130,6 +143,51 @@ export function RunDetailScreen() {
       showToast('Failed to merge Apple Health metrics', 'error');
     } finally {
       setIsMerging(false);
+    }
+  }
+
+  async function chooseHero(kind: string | null) {
+    if (!run) return;
+    setSavingHero(true);
+    try {
+      const visual = kind ? await buildHero(db, run, routePoints, settings.units, kind) : null;
+      await updateRun(db, run.id, { hero_json: visual ? JSON.stringify(visual) : null });
+      await reloadRun(run.id);
+      if (user) syncToCloud(db).catch(() => {});
+    } catch {
+      showToast('Could not save that stat', 'error');
+    } finally {
+      setSavingHero(false);
+    }
+  }
+
+  async function openMerge() {
+    if (!run) return;
+    const others = (await getRuns(db, 200)).filter(candidate => candidate.id !== run.id);
+    const origin = Date.parse(run.date);
+    others.sort((a, b) => Math.abs(Date.parse(a.date) - origin) - Math.abs(Date.parse(b.date) - origin));
+    setMergeCandidates(others.slice(0, 40));
+    setMergeSelected([]);
+    setMergeOpen(true);
+  }
+
+  function toggleMerge(id: string) {
+    setMergeSelected(current => current.includes(id) ? current.filter(item => item !== id) : [...current, id]);
+  }
+
+  async function handleMergeRuns() {
+    if (!run || mergeSelected.length === 0) return;
+    setMergingRuns(true);
+    try {
+      await mergeRuns(db, run.id, mergeSelected);
+      await reloadRun(run.id);
+      setMergeOpen(false);
+      showToast(mergeSelected.length === 1 ? 'Run appended' : `${mergeSelected.length} runs appended`, 'success');
+      if (user) syncToCloud(db).catch(() => {});
+    } catch {
+      showToast('Could not merge those runs', 'error');
+    } finally {
+      setMergingRuns(false);
     }
   }
 
@@ -205,6 +263,41 @@ export function RunDetailScreen() {
       />
 
       <div className="flex flex-col gap-4 px-4 pt-4">
+        {parseHero(run.hero_json) && (
+          <div className="rounded-2xl overflow-hidden">
+            <HeroVisualView hero={parseHero(run.hero_json)!} />
+          </div>
+        )}
+
+        {!isFriendRun && heroOptions.length > 0 && (
+          <div className="flex flex-col gap-2">
+            <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">Show friends</p>
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              <button
+                type="button"
+                disabled={savingHero}
+                onClick={() => chooseHero(null)}
+                className={`shrink-0 text-xs px-3 py-1.5 rounded-full ${!run.hero_json ? 'bg-primary-600 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300'}`}
+              >
+                None
+              </button>
+              {heroOptions.map(option => {
+                const selected = parseHero(run.hero_json)?.kind === option.kind;
+                return (
+                  <button
+                    key={option.kind}
+                    type="button"
+                    disabled={savingHero}
+                    onClick={() => chooseHero(option.kind)}
+                    className={`shrink-0 text-xs px-3 py-1.5 rounded-full ${selected ? 'bg-primary-600 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300'}`}
+                  >
+                    {option.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* ── Hero card ─────────────────────────────────────────── */}
         <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
@@ -271,6 +364,12 @@ export function RunDetailScreen() {
 
         {splits.length > 0 && (
           <RunSplitsSection splits={splits} unit={settings.units} />
+        )}
+
+        {!isFriendRun && (
+          <Button variant="secondary" onClick={openMerge}>
+            Merge runs
+          </Button>
         )}
 
         {!isFriendRun && (
@@ -351,6 +450,48 @@ export function RunDetailScreen() {
           </div>
         )}
       </div>
+
+      <Modal isOpen={mergeOpen} onClose={() => setMergeOpen(false)} title="Merge runs">
+        <div className="flex flex-col gap-3">
+          <p className="text-sm text-gray-600 dark:text-gray-300">
+            Selected runs are added onto this one in the order you ran them, including the route. Those runs are then deleted.
+          </p>
+          {mergeCandidates.length === 0 ? (
+            <p className="text-sm text-gray-400">No other runs to merge.</p>
+          ) : (
+            <div className="flex flex-col gap-2 max-h-72 overflow-y-auto">
+              {mergeCandidates.map(candidate => {
+                const selected = mergeSelected.includes(candidate.id);
+                return (
+                  <button
+                    key={candidate.id}
+                    type="button"
+                    onClick={() => toggleMerge(candidate.id)}
+                    className={`text-left rounded-xl border px-3 py-2 ${selected ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20' : 'border-gray-200 dark:border-gray-700'}`}
+                  >
+                    <p className="text-sm font-medium text-gray-900 dark:text-white">
+                      {formatShortWithTime(candidate.date)}
+                    </p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      {formatDistance(candidate.distance_value, candidate.distance_unit)}
+                      {' · '}
+                      {formatDuration(candidate.duration_seconds)}
+                    </p>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          <Button
+            className="w-full"
+            onClick={handleMergeRuns}
+            isLoading={mergingRuns}
+            disabled={mergeSelected.length === 0}
+          >
+            {mergeSelected.length === 0 ? 'Select runs' : `Append ${mergeSelected.length === 1 ? 'run' : `${mergeSelected.length} runs`}`}
+          </Button>
+        </div>
+      </Modal>
 
       <Modal isOpen={gearEditOpen} onClose={() => setGearEditOpen(false)} title="Edit Gear">
         <div className="flex flex-col gap-4">

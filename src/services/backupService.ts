@@ -110,6 +110,9 @@ export async function restoreFromBackup(db: Database, backup: FullBackup): Promi
         run.created_at, run.updated_at,
       ],
     );
+    if (run.hero_json) {
+      await db.execute('UPDATE runs SET hero_json = $1 WHERE id = $2', [run.hero_json, run.id]);
+    }
   }
 
   for (const goal of backup.goals) {

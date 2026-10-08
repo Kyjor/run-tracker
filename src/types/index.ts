@@ -205,6 +205,9 @@ export interface Run {
   /** 1 if GPS route data exists in run_routes table */
   has_route: number;
 
+  /** Chosen show-off visual, JSON encoded HeroVisual. Null until the runner picks one. */
+  hero_json: string | null;
+
   created_at: string;
   updated_at: string;
   sync_status: SyncStatus;
@@ -348,6 +351,18 @@ export interface FeedItem {
   user_has_liked?: boolean;
   /** GPS route for run_completed feed cards */
   route_points?: RoutePoint[];
+  hero?: HeroVisual | null;
+}
+
+/** A compact visual attached to a run so friends see one chosen stat. */
+export interface HeroVisual {
+  kind: string;
+  title: string;
+  headline: string;
+  caption?: string;
+  /** Minutes from the start, and the stat at that moment. */
+  series?: { t: number; y: number }[];
+  slices?: { label: string; seconds: number; color: string }[];
 }
 
 export interface FeedComment {

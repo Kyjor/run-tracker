@@ -1,7 +1,8 @@
 import type Database from '@tauri-apps/plugin-sql';
-import type { Run, RunType, DistanceUnit, RoutePoint } from '../types';
+import type { HRZones, Run, RunType, DistanceUnit, RoutePoint } from '../types';
 import { generateId } from '../utils/generateId';
 import { dateToDatetime } from '../utils/dateUtils';
+import { convertDistance } from '../utils/paceUtils';
 
 // ---------------------------------------------------------------------------
 // Input types
@@ -173,6 +174,7 @@ export async function createRun(db: Database, input: CreateRunInput): Promise<Ru
 
     calories: input.calories ?? null,
     has_route: input.has_route ?? 0,
+    hero_json: null,
 
     created_at: now,
     updated_at: now,
@@ -277,6 +279,155 @@ export async function getRouteForRun(db: Database, runId: string): Promise<Route
     return Array.isArray(parsed) ? parsed : null;
   } catch {
     return null;
+  }
+}
+
+function weightedAverage(parts: { value: number | null; seconds: number }[]): number | null {
+  let total = 0;
+  let weight = 0;
+  for (const part of parts) {
+    if (part.value == null || part.seconds <= 0) continue;
+    total += part.value * part.seconds;
+    weight += part.seconds;
+  }
+  return weight > 0 ? total / weight : null;
+}
+
+function roundTo(value: number | null, digits: number): number | null {
+  if (value == null) return null;
+  const factor = 10 ** digits;
+  return Math.round(value * factor) / factor;
+}
+
+function sumPresent(values: Array<number | null>): number | null {
+  const present = values.filter((value): value is number => value != null);
+  if (present.length === 0) return null;
+  return present.reduce((sum, value) => sum + value, 0);
+}
+
+function extreme(values: Array<number | null>, pick: 'min' | 'max'): number | null {
+  const present = values.filter((value): value is number => value != null);
+  if (present.length === 0) return null;
+  return pick === 'min' ? Math.min(...present) : Math.max(...present);
+}
+
+function sumZones(runs: Run[]): string | null {
+  const keys: (keyof HRZones)[] = ['z1_seconds', 'z2_seconds', 'z3_seconds', 'z4_seconds', 'z5_seconds'];
+  const totals: HRZones = { z1_seconds: 0, z2_seconds: 0, z3_seconds: 0, z4_seconds: 0, z5_seconds: 0 };
+  let found = false;
+  for (const run of runs) {
+    if (!run.hr_zones) continue;
+    try {
+      const parsed = JSON.parse(run.hr_zones) as Partial<HRZones>;
+      found = true;
+      for (const key of keys) totals[key] += parsed[key] ?? 0;
+    } catch {
+      // Ignore a bad zone blob and keep the others.
+    }
+  }
+  return found ? JSON.stringify(totals) : null;
+}
+
+/**
+ * Fold other runs into `keepId` in the order they were started, then delete them.
+ * Distance, time, elevation, and calories add up. Heart rate, cadence, and power
+ * are averaged by time. GPS points are concatenated.
+ */
+export async function mergeRuns(db: Database, keepId: string, appendIds: string[]): Promise<void> {
+  const ids = [...new Set(appendIds.filter(id => id && id !== keepId))];
+  if (ids.length === 0) return;
+
+  const keep = await getRunById(db, keepId);
+  if (!keep) throw new Error('Run not found');
+  const others: Run[] = [];
+  for (const id of ids) {
+    const run = await getRunById(db, id);
+    if (run) others.push(run);
+  }
+  if (others.length === 0) return;
+
+  const ordered = [keep, ...others].sort((a, b) => a.date.localeCompare(b.date));
+  const unit = keep.distance_unit;
+  const distance = ordered.reduce(
+    (sum, run) => sum + convertDistance(run.distance_value, run.distance_unit, unit),
+    0,
+  );
+  const duration = ordered.reduce((sum, run) => sum + (run.duration_seconds || 0), 0);
+  const parts = ordered.map(run => ({ seconds: run.duration_seconds || 0 }));
+  const weighted = (pick: (run: Run) => number | null) =>
+    weightedAverage(ordered.map((run, i) => ({ value: pick(run), seconds: parts[i].seconds })));
+
+  const effort = weighted(run => run.effort);
+  const notes = [...new Set(ordered.map(run => run.notes.trim()).filter(Boolean))].join('\n');
+  const earliest = ordered[0];
+  const latestWithVo2 = [...ordered].reverse().find(run => run.vo2_max != null);
+
+  const points: RoutePoint[] = [];
+  for (const run of ordered) {
+    const route = await getRouteForRun(db, run.id);
+    if (route) points.push(...route);
+  }
+  if (points.every(point => point.t != null)) {
+    points.sort((a, b) => (a.t ?? 0) - (b.t ?? 0));
+  }
+
+  await updateRun(db, keepId, {
+    date: earliest.date,
+    distance_value: roundTo(distance, 2) ?? distance,
+    duration_seconds: duration,
+    notes,
+    effort: effort == null ? null : Math.min(5, Math.max(1, Math.round(effort))),
+    plan_day_id: keep.plan_day_id ?? earliest.plan_day_id,
+    avg_heart_rate: roundTo(weighted(run => run.avg_heart_rate), 0),
+    max_heart_rate: extreme(ordered.map(run => run.max_heart_rate), 'max'),
+    min_heart_rate: extreme(ordered.map(run => run.min_heart_rate), 'min'),
+    hr_zones: sumZones(ordered),
+    avg_cadence: roundTo(weighted(run => run.avg_cadence), 0),
+    avg_stride_length_meters: roundTo(weighted(run => run.avg_stride_length_meters), 2),
+    avg_ground_contact_time_ms: roundTo(weighted(run => run.avg_ground_contact_time_ms), 0),
+    avg_vertical_oscillation_cm: roundTo(weighted(run => run.avg_vertical_oscillation_cm), 1),
+    avg_power_watts: roundTo(weighted(run => run.avg_power_watts), 0),
+    max_power_watts: extreme(ordered.map(run => run.max_power_watts), 'max'),
+    elevation_gain_meters: roundTo(sumPresent(ordered.map(run => run.elevation_gain_meters)), 1),
+    elevation_loss_meters: roundTo(sumPresent(ordered.map(run => run.elevation_loss_meters)), 1),
+    vo2_max: latestWithVo2?.vo2_max ?? null,
+    temperature_celsius: earliest.temperature_celsius,
+    humidity_percent: earliest.humidity_percent,
+    weather_condition: earliest.weather_condition,
+    calories: roundTo(sumPresent(ordered.map(run => run.calories)), 0),
+    has_route: points.length >= 2 ? 1 : keep.has_route,
+  });
+
+  if (points.length >= 2) {
+    const existing = await db.select<{ id: string }[]>(
+      'SELECT id FROM run_routes WHERE run_id = $1 LIMIT 1',
+      [keepId],
+    );
+    const json = JSON.stringify(points);
+    if (existing[0]) {
+      await db.execute('UPDATE run_routes SET points_json = $1 WHERE run_id = $2', [json, keepId]);
+    } else {
+      await db.execute(
+        'INSERT INTO run_routes (id, run_id, points_json, created_at) VALUES ($1, $2, $3, $4)',
+        [generateId(), keepId, json, new Date().toISOString()],
+      );
+    }
+  }
+
+  for (const other of others) {
+    const gear = await db.select<{ gear_id: string }[]>(
+      'SELECT gear_id FROM run_gear WHERE run_id = $1',
+      [other.id],
+    );
+    for (const row of gear) {
+      await db.execute(
+        'INSERT OR IGNORE INTO run_gear (run_id, gear_id) VALUES ($1, $2)',
+        [keepId, row.gear_id],
+      );
+    }
+    await db.execute('DELETE FROM fit_imports WHERE run_id = $1', [other.id]);
+    await db.execute('DELETE FROM run_routes WHERE run_id = $1', [other.id]);
+    await deleteRun(db, other.id);
   }
 }
 
