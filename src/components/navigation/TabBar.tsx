@@ -20,9 +20,9 @@ const CalIcon = ({ filled }: { filled: boolean }) => (
 );
 
 const LogIcon = () => (
-  <div className="w-12 h-12 bg-primary-600 rounded-2xl flex items-center justify-center shadow-lg">
+  <div className="w-12 h-12 bg-primary-600 rounded-2xl flex items-center justify-center">
     <svg viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2} className="w-6 h-6">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 010 1.972l-11.54 6.347a1.125 1.125 0 01-1.667-.986V5.653z" />
     </svg>
   </div>
 );
@@ -42,7 +42,7 @@ const PersonIcon = ({ filled }: { filled: boolean }) => (
 const TABS: Tab[] = [
   { path: '/home', label: 'Home', icon: <HomeIcon filled={false} />, activeIcon: <HomeIcon filled={true} /> },
   { path: '/calendar', label: 'Calendar', icon: <CalIcon filled={false} />, activeIcon: <CalIcon filled={true} /> },
-  { path: '/log', label: 'Log', icon: <LogIcon />, activeIcon: <LogIcon /> },
+  { path: '/log/live', label: 'Start', icon: <LogIcon />, activeIcon: <LogIcon /> },
   { path: '/stats', label: 'Stats', icon: <StatsIcon filled={false} />, activeIcon: <StatsIcon filled={true} /> },
   { path: '/profile', label: 'Profile', icon: <PersonIcon filled={false} />, activeIcon: <PersonIcon filled={true} /> },
 ];
@@ -55,8 +55,10 @@ export function TabBar() {
     <nav className="fixed bottom-0 left-0 right-0 z-40 bg-surface/95 dark:bg-surface-dark/95 backdrop-blur-lg border-t border-border dark:border-border-dark pb-safe-bottom">
       <div className="flex items-end justify-around px-2 pt-2 pb-1">
         {TABS.map(tab => {
-          const isLog = tab.path === '/log';
-          const isActive = location.pathname.startsWith(tab.path);
+          const isLog = tab.path === '/log/live';
+          const isActive = isLog
+            ? location.pathname.startsWith('/log/live')
+            : location.pathname.startsWith(tab.path);
 
           if (isLog) {
             return (
@@ -66,6 +68,7 @@ export function TabBar() {
                 className="flex flex-col items-center gap-0.5 px-4 -mt-4"
               >
                 {tab.icon}
+                <span className="text-[10px] font-medium text-primary-600 dark:text-primary-400">Start</span>
               </button>
             );
           }

@@ -45,6 +45,7 @@ export function LogRunScreen() {
         duration_seconds: runValues.duration_seconds,
         run_type: runValues.run_type,
         notes: runValues.notes,
+        effort: runValues.effort,
         avg_heart_rate: runValues.avg_heart_rate,
         max_heart_rate: runValues.max_heart_rate,
       });
@@ -58,7 +59,7 @@ export function LogRunScreen() {
         max_heart_rate: runValues.max_heart_rate,
       });
       await assignGearToRun(db, run.id, gear_ids);
-      showToast('Run logged! 🎉', 'success');
+      showToast('Run logged', 'success');
       if (session) {
         publishFeedActivity('run_completed', {
           distance: run.distance_value,

@@ -176,6 +176,7 @@ async function pushDirtyRuns(db: Database, userId: string): Promise<void> {
       humidity_percent: run.humidity_percent,
       weather_condition: run.weather_condition,
       calories: run.calories,
+      effort: run.effort,
     });
     if (error) {
       console.error('Failed to sync run', run.id, error.message);
@@ -290,6 +291,7 @@ async function pushDirtyActivePlan(db: Database, userId: string): Promise<void> 
       difficulty: plan?.difficulty ?? null,
       duration_weeks: plan?.duration_weeks ?? null,
       plan_days_json: planDaysJson.length > 0 ? planDaysJson : null,
+      race_date: ap.race_date ?? null,
     });
     if (error) {
       console.error('Failed to sync active plan', ap.id, error.message);
@@ -524,6 +526,7 @@ export async function pullFromCloud(db: Database): Promise<void> {
         run.humidity_percent ?? null,
         run.weather_condition ?? null,
         run.calories ?? null,
+        run.effort ?? null,
         run.created_at,
         run.updated_at,
       ];
@@ -539,7 +542,7 @@ export async function pullFromCloud(db: Database): Promise<void> {
              elevation_gain_meters, elevation_loss_meters,
              vo2_max,
              temperature_celsius, humidity_percent, weather_condition,
-             calories, has_route,
+             calories, has_route, effort,
              created_at, updated_at, sync_status)
            VALUES (
              $1,$2,$3,$4,$5,$6,
@@ -550,8 +553,8 @@ export async function pullFromCloud(db: Database): Promise<void> {
              $20,$21,
              $22,
              $23,$24,$25,
-             $26,0,
-             $27,$28,'synced'
+             $26,0,$27,
+             $28,$29,'synced'
            )`,
           [run.id, ...cols],
         );
@@ -565,8 +568,8 @@ export async function pullFromCloud(db: Database): Promise<void> {
             avg_vertical_oscillation_cm=$16, avg_power_watts=$17, max_power_watts=$18,
             elevation_gain_meters=$19, elevation_loss_meters=$20, vo2_max=$21,
             temperature_celsius=$22, humidity_percent=$23, weather_condition=$24,
-            calories=$25, created_at=$26, updated_at=$27, sync_status='synced'
-           WHERE id=$28`,
+            calories=$25, effort=$26, created_at=$27, updated_at=$28, sync_status='synced'
+           WHERE id=$29`,
           [...cols, run.id],
         );
       }
@@ -622,14 +625,14 @@ export async function pullFromCloud(db: Database): Promise<void> {
     
     if (existing.length > 0) {
       await db.execute(
-        "UPDATE active_plan SET plan_id=$1, start_date=$2, is_active=1, sync_status='synced' WHERE id=$3",
-        [remoteActivePlan.plan_id, remoteActivePlan.start_date, remoteActivePlan.id],
+        "UPDATE active_plan SET plan_id=$1, start_date=$2, race_date=$3, is_active=1, sync_status='synced' WHERE id=$4",
+        [remoteActivePlan.plan_id, remoteActivePlan.start_date, remoteActivePlan.race_date ?? null, remoteActivePlan.id],
       );
     } else {
       await db.execute(
-        `INSERT INTO active_plan (id, plan_id, start_date, is_active, created_at, sync_status)
-         VALUES ($1,$2,$3,1,$4,'synced')`,
-        [remoteActivePlan.id, remoteActivePlan.plan_id, remoteActivePlan.start_date, remoteActivePlan.created_at],
+        `INSERT INTO active_plan (id, plan_id, start_date, race_date, is_active, created_at, sync_status)
+         VALUES ($1,$2,$3,$4,1,$5,'synced')`,
+        [remoteActivePlan.id, remoteActivePlan.plan_id, remoteActivePlan.start_date, remoteActivePlan.race_date ?? null, remoteActivePlan.created_at],
       );
     }
   } else {

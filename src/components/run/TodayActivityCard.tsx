@@ -27,12 +27,11 @@ export function TodayActivityCard({ activity, weekNumber, dayOfWeek, weekProgres
 
   if (!plan_day) {
     return (
-      <Card className="bg-gradient-to-br from-primary-50 to-blue-50 dark:from-primary-900/20 dark:to-blue-900/20 border-0">
+      <Card>
         <div className="text-center py-4">
-          <p className="text-4xl mb-2">🏃</p>
           <p className="font-semibold text-gray-800 dark:text-gray-100">No plan active</p>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">Choose a plan to get started</p>
-          <Button onClick={() => navigate('/profile/plans')} size="sm">Browse Plans</Button>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">You can still log runs without one.</p>
+          <Button onClick={() => navigate('/log/live')} size="sm">Start a run</Button>
         </div>
       </Card>
     );
@@ -163,16 +162,21 @@ export function TodayActivityCard({ activity, weekNumber, dayOfWeek, weekProgres
           <div className="mt-4">
             {is_completed ? (
               <div className="flex items-center gap-2 text-green-600 dark:text-green-400">
-                <span className="text-lg">✓</span>
-                <span className="font-semibold text-sm">Completed!</span>
+                <span className="font-semibold text-sm">Done for today</span>
               </div>
             ) : (
-              <Button
-                onClick={() => navigate('/log/manual', { state: { date: today(), planDayId: plan_day.id, prefill: plan_day } })}
-                className="w-full"
-              >
-                Log Today's Run
-              </Button>
+              <div className="flex flex-col gap-2">
+                <Button onClick={() => navigate('/log/live')} className="w-full">
+                  Start {ACTIVITY_LABELS[plan_day.activity_type]}
+                </Button>
+                <button
+                  type="button"
+                  className="text-xs text-primary-600 dark:text-primary-400"
+                  onClick={() => navigate('/log/manual', { state: { date: today(), planDayId: plan_day.id, prefill: plan_day } })}
+                >
+                  Log it manually
+                </button>
+              </div>
             )}
           </div>
         )}

@@ -1,13 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { DistanceUnit, RunType } from '../types';
+import { ACTIVITY_LABELS, PACE_ZONE_LABELS, type DistanceUnit, type PaceZoneType, type RunType } from '../types';
 import { Header } from '../components/navigation/Header';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Spinner } from '../components/ui/Spinner';
 import { RunRouteMap } from '../components/run/RunRouteMap';
 import { AnimatedNumber } from '../components/motion/AnimatedNumber';
-import { FadeIn } from '../components/motion/FadeIn';
 import { useDb } from '../contexts/DatabaseContext';
 import { useSettings } from '../contexts/SettingsContext';
 import { useToast } from '../contexts/ToastContext';
@@ -24,14 +23,53 @@ import { buildHrZonesFromSummary } from '../utils/hrZones';
 import {
   getLiveRunSnapshot,
   isNativeLiveTrackingAvailable,
+  pauseLiveRun,
   requestLocationPermission,
+  resumeLiveRun,
   startLiveRun,
   stopLiveRun,
   subscribeLiveRunUpdates,
   type LiveRunSnapshot,
 } from '../services/liveRunTrackingService';
+import { EffortPicker } from '../components/run/EffortPicker';
+import { hapticTick, speak, spokenDuration } from '../utils/runCues';
+import { parseSegments } from '../utils/workoutUtils';
 
-type SessionState = 'idle' | 'running' | 'saving';
+type SessionState = 'idle' | 'running' | 'paused' | 'review' | 'saving';
+
+function flattenSegments(raw: string | null | undefined, unit: DistanceUnit) {
+  const segments = parseSegments(raw) ?? [];
+  const metersPerUnit = unit === 'mi' ? 1609.34 : 1000;
+  const rows: { meters: number; label: string }[] = [];
+  for (const segment of segments) {
+    const reps = segment.reps && segment.reps > 0 ? segment.reps : 1;
+    const each = (segment.distance_value ?? 0) * metersPerUnit;
+    if (each <= 0) continue;
+    const label = segment.description || PACE_ZONE_LABELS[segment.zone];
+    for (let i = 0; i < reps; i++) rows.push({ meters: each, label });
+  }
+  return rows;
+}
+
+function crossedSegments(rows: { meters: number }[], distanceMeters: number) {
+  let acc = 0;
+  let crossed = 0;
+  for (const row of rows) {
+    acc += row.meters;
+    if (distanceMeters >= acc) crossed += 1;
+    else break;
+  }
+  return crossed;
+}
+
+const ZONE_FOR_ACTIVITY: Partial<Record<string, PaceZoneType>> = {
+  easy_run: 'easy',
+  pace_run: 'race',
+  tempo_run: 'tempo',
+  long_run: 'long',
+  intervals: 'intervals',
+  race: 'race',
+};
 
 function applySnapshot(snapshot: LiveRunSnapshot) {
   return {
@@ -40,6 +78,7 @@ function applySnapshot(snapshot: LiveRunSnapshot) {
     elapsedSeconds: Math.floor(snapshot.elapsed_seconds),
     permissionWarning: snapshot.permission_warning ?? null,
     isRunning: snapshot.state === 'running',
+    isPaused: snapshot.state === 'paused',
     currentHr: snapshot.current_heart_rate ?? null,
     avgHr: snapshot.avg_heart_rate ?? null,
     maxHr: snapshot.max_heart_rate ?? null,
@@ -52,10 +91,15 @@ export function LiveRunScreen() {
   const db = useDb();
   const { settings } = useSettings();
   const { showToast } = useToast();
-  const { refresh } = usePlan();
+  const { refresh, todayActivity } = usePlan();
   const { session } = useAuth();
 
   const [sessionState, setSessionState] = useState<SessionState>('idle');
+  const [pendingSnapshot, setPendingSnapshot] = useState<LiveRunSnapshot | null>(null);
+  const [effort, setEffort] = useState<number | null>(null);
+  const reviewing = useRef(false);
+  const splitRef = useRef({ index: 0, elapsed: 0, primed: false });
+  const segmentRef = useRef(0);
   const [points, setPoints] = useState<LiveRunSnapshot['points']>([]);
   const [distanceMeters, setDistanceMeters] = useState(0);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
@@ -80,6 +124,57 @@ export function LiveRunScreen() {
 
   const lastPoint = points.length > 0 ? points[points.length - 1] : null;
   const isRunning = sessionState === 'running';
+  const isPaused = sessionState === 'paused';
+  const isActive = isRunning || isPaused;
+
+  const planDay = todayActivity?.plan_day ?? null;
+  const runLike = planDay != null && planDay.activity_type !== 'rest' && planDay.activity_type !== 'cross_training';
+  const targetZone = planDay ? ZONE_FOR_ACTIVITY[planDay.activity_type] : undefined;
+  const targetPace = targetZone ? settings.pace_zones[targetZone] : null;
+  const plannedDistance = runLike && planDay?.distance_value
+    ? (planDay.distance_unit === unit
+      ? planDay.distance_value
+      : unit === 'mi'
+        ? planDay.distance_value / 1.60934
+        : planDay.distance_value * 1.60934)
+    : null;
+  const remaining = plannedDistance != null ? Math.max(0, plannedDistance - distanceValue) : null;
+
+  useEffect(() => {
+    if (!isRunning) {
+      splitRef.current.primed = false;
+      return;
+    }
+    const splitMeters = unit === 'mi' ? 1609.34 : 1000;
+    const index = Math.floor(distanceMeters / splitMeters);
+    const segmentRows = flattenSegments(planDay?.workout_segments, unit);
+    const crossed = crossedSegments(segmentRows, distanceMeters);
+    if (!splitRef.current.primed) {
+      splitRef.current = { index, elapsed: elapsedSeconds, primed: true };
+      segmentRef.current = crossed;
+      return;
+    }
+    if (index > splitRef.current.index) {
+      const splitSeconds = Math.max(0, elapsedSeconds - splitRef.current.elapsed);
+      splitRef.current = { index, elapsed: elapsedSeconds, primed: true };
+      const unitName = unit === 'mi' ? 'Mile' : 'Kilometer';
+      let line = `${unitName} ${index}. ${spokenDuration(splitSeconds)}.`;
+      if (targetPace && splitSeconds > 0) {
+        const delta = Math.round(splitSeconds - targetPace);
+        if (Math.abs(delta) >= 8) {
+          line += delta > 0 ? ` ${delta} seconds slow.` : ` ${Math.abs(delta)} seconds fast.`;
+        }
+      }
+      speak(line);
+      void hapticTick();
+    }
+
+    if (crossed > segmentRef.current && crossed < segmentRows.length) {
+      speak(`Next. ${segmentRows[crossed].label}.`);
+      void hapticTick();
+    }
+    segmentRef.current = crossed;
+  }, [isRunning, distanceMeters, elapsedSeconds, unit, targetPace, planDay]);
 
   const syncFromSnapshot = useRef((snapshot: LiveRunSnapshot) => {
     const next = applySnapshot(snapshot);
@@ -88,7 +183,10 @@ export function LiveRunScreen() {
     setElapsedSeconds(next.elapsedSeconds);
     setPermissionWarning(next.permissionWarning);
     setCurrentHr(next.currentHr);
-    setSessionState(next.isRunning ? 'running' : 'idle');
+    if (reviewing.current) return;
+    if (next.isRunning) setSessionState('running');
+    else if (next.isPaused) setSessionState('paused');
+    else setSessionState('idle');
   }).current;
 
   useEffect(() => {
@@ -175,17 +273,47 @@ export function LiveRunScreen() {
     }
   }
 
-  async function handleEnd() {
-    if (sessionState !== 'running') return;
-    setSessionState('saving');
+  async function handlePause() {
+    const snapshot = await pauseLiveRun();
+    syncFromSnapshot(snapshot);
+    speak('Paused.');
+  }
 
+  async function handleResume() {
+    const snapshot = await resumeLiveRun();
+    syncFromSnapshot(snapshot);
+    speak('Resumed.');
+  }
+
+  async function handleEnd() {
+    if (sessionState !== 'running' && sessionState !== 'paused') return;
+    reviewing.current = true;
     try {
       const snapshot = await stopLiveRun();
       if (bleEnabled) await stopHrmScan();
-
-      if (!db) {
-        throw new Error('Database is not ready');
+      if (snapshot.distance_meters <= 0 || snapshot.elapsed_seconds <= 0) {
+        reviewing.current = false;
+        throw new Error('Need some movement and time to save a run.');
       }
+      setPendingSnapshot(snapshot);
+      setDistanceMeters(snapshot.distance_meters);
+      setElapsedSeconds(Math.floor(snapshot.elapsed_seconds));
+      setPoints(snapshot.points);
+      setSessionState('review');
+    } catch (e) {
+      reviewing.current = false;
+      const message = e instanceof Error ? e.message : String(e);
+      setError(message);
+      showToast('Could not save live run', 'error');
+    }
+  }
+
+  async function handleSave() {
+    const snapshot = pendingSnapshot;
+    if (!snapshot || !db) return;
+    setSessionState('saving');
+
+    try {
       if (snapshot.distance_meters <= 0 || snapshot.elapsed_seconds <= 0) {
         throw new Error('Need some movement and time to save a run.');
       }
@@ -195,7 +323,10 @@ export function LiveRunScreen() {
         : snapshot.distance_meters / 1000;
       const roundedDistance = Math.round(saveDistanceValue * 100) / 100;
       const nowIso = new Date().toISOString();
-      const runType: RunType = 'easy_run';
+      const activity = planDay?.activity_type;
+      const runType: RunType = activity && activity in ACTIVITY_LABELS && activity !== 'rest' && activity !== 'cross_training'
+        ? activity as RunType
+        : 'easy_run';
       const duration = Math.floor(snapshot.elapsed_seconds);
       const avgHr = snapshot.avg_heart_rate ?? null;
       const maxHr = snapshot.max_heart_rate ?? null;
@@ -207,7 +338,9 @@ export function LiveRunScreen() {
         distance_unit: unit,
         duration_seconds: duration,
         run_type: runType,
+        plan_day_id: planDay?.id ?? null,
         notes: '',
+        effort,
         source: 'live',
         has_route: snapshot.points.length > 0 ? 1 : 0,
         avg_heart_rate: avgHr,
@@ -229,7 +362,9 @@ export function LiveRunScreen() {
         await assignGearToRun(db, run.id, gearIds);
       }
 
-      showToast('Live run saved! 🎉', 'success');
+      showToast('Live run saved', 'success');
+      reviewing.current = false;
+      setPendingSnapshot(null);
       await refresh();
 
       if (session) {
@@ -250,59 +385,54 @@ export function LiveRunScreen() {
       const message = e instanceof Error ? e.message : String(e);
       setError(message);
       showToast('Could not save live run', 'error');
-      setSessionState('idle');
+      setSessionState('review');
     }
   }
 
   return (
     <div className="flex flex-col flex-1 overflow-y-auto pb-safe-bottom">
-      <Header title="Live Run" showBack={!isRunning} />
+      <Header title={isPaused ? 'Paused' : 'Live Run'} showBack={!isActive && sessionState !== 'review'} />
 
-      {isRunning && (
-        <div className="mx-4 mt-2">
-          <RunRouteMap points={points} followLatest className="h-72 rounded-card" />
+      <div className="px-4 pt-6 flex flex-col gap-4">
+        <div className="text-center">
+          <p className="text-[11px] uppercase tracking-wide text-ink-muted">Time</p>
+          <p className="text-6xl font-semibold tabular-nums text-ink-primary dark:text-ink-dark-primary leading-none">
+            {isRunning
+              ? <AnimatedNumber value={elapsedSeconds} format={(n) => formatDuration(Math.floor(n))} />
+              : formatDuration(elapsedSeconds)}
+          </p>
+          {isPaused && (
+            <p className="text-sm text-amber-600 dark:text-amber-400 mt-2">Time is frozen. It resumes when you move, or when you tap Resume.</p>
+          )}
         </div>
-      )}
 
-      <div className="px-4 pt-4 flex flex-col gap-4">
-        <FadeIn>
-          <Card>
-            <div className="flex items-center justify-between gap-2">
-              <div className="min-w-0 flex-1 text-center">
-                <p className="text-xs uppercase tracking-wide text-ink-muted">Time</p>
-                <p className="text-2xl font-semibold tabular-nums text-ink-primary dark:text-ink-dark-primary">
-                  {isRunning
-                    ? <AnimatedNumber value={elapsedSeconds} format={(n) => formatDuration(Math.floor(n))} />
-                    : formatDuration(elapsedSeconds)}
-                </p>
-              </div>
-              <div className="min-w-0 flex-1 text-center">
-                <p className="text-xs uppercase tracking-wide text-ink-muted">{unit}</p>
-                <p className="text-2xl font-semibold tabular-nums text-ink-primary dark:text-ink-dark-primary">
-                  {isRunning
-                    ? <AnimatedNumber value={distanceValue} format={(n) => n.toFixed(2)} />
-                    : distanceValue.toFixed(2)}
-                </p>
-              </div>
-              <div className="min-w-0 flex-1 text-center">
-                <p className="text-xs uppercase tracking-wide text-ink-muted">Pace</p>
-                <p className="text-2xl font-semibold tabular-nums text-ink-primary dark:text-ink-dark-primary">
-                  {formatPace(paceSeconds, unit)}
-                </p>
-              </div>
-              {currentHr != null && (
-                <div className="min-w-0 flex-1 text-center">
-                  <p className="text-xs uppercase tracking-wide text-ink-muted">HR</p>
-                  <p className="text-2xl font-semibold tabular-nums text-ink-primary dark:text-ink-dark-primary">
-                    {isRunning
-                      ? <AnimatedNumber value={currentHr} format={(n) => `${Math.round(n)}`} />
-                      : Math.round(currentHr)}
-                  </p>
-                </div>
-              )}
-            </div>
-          </Card>
-        </FadeIn>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="text-center">
+            <p className="text-[11px] uppercase tracking-wide text-ink-muted">{unit}</p>
+            <p className="text-4xl font-semibold tabular-nums">
+              {isRunning
+                ? <AnimatedNumber value={distanceValue} format={(n) => n.toFixed(2)} />
+                : distanceValue.toFixed(2)}
+            </p>
+          </div>
+          <div className="text-center">
+            <p className="text-[11px] uppercase tracking-wide text-ink-muted">Pace</p>
+            <p className="text-4xl font-semibold tabular-nums">{formatPace(paceSeconds, unit)}</p>
+          </div>
+        </div>
+
+        {(runLike || currentHr != null || targetPace) && (
+          <p className="text-center text-sm text-ink-secondary dark:text-ink-dark-secondary">
+            {runLike && planDay ? ACTIVITY_LABELS[planDay.activity_type] : null}
+            {targetPace ? ` · target ${formatPace(targetPace, unit)}` : ''}
+            {remaining != null ? ` · ${remaining.toFixed(2)} ${unit} left` : ''}
+            {currentHr != null ? ` · ${Math.round(currentHr)} bpm` : ''}
+          </p>
+        )}
+
+        {isActive && (
+          <RunRouteMap points={points} followLatest className="h-40 rounded-card" />
+        )}
 
         <div className="flex flex-col gap-1 px-1">
           <p className="text-xs text-ink-secondary">
@@ -315,7 +445,7 @@ export function LiveRunScreen() {
           {error && <p className="text-xs text-red-500">{error}</p>}
         </div>
 
-        {usesNativeTracking && !isRunning && (
+        {usesNativeTracking && sessionState === 'idle' && (
           <Card>
             <div className="flex items-center justify-between gap-3">
               <div>
@@ -335,33 +465,40 @@ export function LiveRunScreen() {
           </Card>
         )}
 
-        <Card>
-          <div className="flex flex-col items-center gap-4">
+        {sessionState === 'review' && (
+          <Card>
+            <EffortPicker value={effort} onChange={setEffort} />
+            <Button className="w-full mt-4" size="lg" onClick={handleSave}>Save run</Button>
+          </Card>
+        )}
+
+        {sessionState !== 'review' && (
+          <div className="flex flex-col gap-3">
             {sessionState === 'saving' ? (
-              <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400">
+              <div className="flex items-center justify-center gap-2 text-gray-500">
                 <Spinner size="sm" />
                 <span className="text-sm">Saving run...</span>
               </div>
+            ) : isActive ? (
+              <div className="grid grid-cols-2 gap-3">
+                <Button size="lg" variant="secondary" onClick={isPaused ? handleResume : handlePause}>
+                  {isPaused ? 'Resume' : 'Pause'}
+                </Button>
+                <Button size="lg" onClick={handleEnd}>End</Button>
+              </div>
             ) : (
               <>
-                <Button
-                  className="w-full"
-                  size="lg"
-                  onClick={isRunning ? handleEnd : handleStart}
-                >
-                  {isRunning ? 'End run' : 'Start live run'}
+                <Button className="w-full" size="lg" onClick={handleStart}>
+                  {planDay && runLike ? `Start ${ACTIVITY_LABELS[planDay.activity_type]}` : 'Start run'}
                 </Button>
-                {!isRunning && (
-                  <p className="text-xs text-gray-500 dark:text-gray-400 text-center">
-                    {usesNativeTracking
-                      ? 'Live tracking continues in the background when you lock your phone or switch apps. Tap the banner to return to your run.'
-                      : 'Live tracking uses your browser GPS while this screen is open.'}
-                  </p>
-                )}
+                <div className="flex justify-center gap-4 text-sm">
+                  <button type="button" className="text-primary-600 dark:text-primary-400" onClick={() => navigate('/log/manual')}>Log manually</button>
+                  <button type="button" className="text-primary-600 dark:text-primary-400" onClick={() => navigate('/log/import-fit')}>Import</button>
+                </div>
               </>
             )}
           </div>
-        </Card>
+        )}
       </div>
     </div>
   );

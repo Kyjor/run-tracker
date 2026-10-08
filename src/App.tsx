@@ -21,6 +21,7 @@ import { Spinner } from './components/ui/Spinner';
 // Screens
 import { OnboardingScreen } from './screens/OnboardingScreen';
 import { AuthScreen } from './screens/AuthScreen';
+import { ResetPasswordScreen } from './screens/ResetPasswordScreen';
 import { DashboardScreen } from './screens/DashboardScreen';
 import { CalendarScreen } from './screens/CalendarScreen';
 import { LogRunScreen } from './screens/LogRunScreen';
@@ -55,7 +56,7 @@ function AppShell() {
   const { isReady, error } = useDatabase();
   const { db } = useDatabase();
   const { settings, isLoaded } = useSettings();
-  const { user } = useAuth();
+  const { user, needsPasswordUpdate } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -87,16 +88,20 @@ function AppShell() {
 
   useEffect(() => {
     if (!isLoaded) return;
+    if (needsPasswordUpdate && location.pathname !== '/auth/reset') {
+      navigate('/auth/reset', { replace: true });
+      return;
+    }
     const onboardingPaths = ['/onboarding', '/auth'];
     const isOnboarding = onboardingPaths.some(p => location.pathname.startsWith(p));
     if (!settings.onboarding_complete && !isOnboarding) {
       navigate('/onboarding', { replace: true });
     }
-    // If user is logged in and sitting on the auth screen, send them home
-    if (user && location.pathname.startsWith('/auth')) {
+    // A recovery session is signed in, but still needs a new password.
+    if (user && !needsPasswordUpdate && location.pathname.startsWith('/auth') && location.pathname !== '/auth/reset') {
       navigate('/home', { replace: true });
     }
-  }, [isLoaded, settings.onboarding_complete, user, location.pathname]);
+  }, [isLoaded, settings.onboarding_complete, user, needsPasswordUpdate, location.pathname, navigate]);
 
   useEffect(() => {
     let cancelled = false;
@@ -137,7 +142,7 @@ function AppShell() {
           <p className="text-red-500 text-sm px-4 text-center">Database error: {error}</p>
         ) : (
           <>
-            <span className="text-5xl">🏃</span>
+            <p className="text-2xl font-semibold tracking-tight text-ink-primary dark:text-ink-dark-primary">Run 4 Fun</p>
             <Spinner size="lg" className="text-primary-500" />
           </>
         )}
@@ -162,6 +167,7 @@ function AppShell() {
           {/* Onboarding & Auth */}
           <Route path="/onboarding" element={<OnboardingScreen />} />
           <Route path="/auth" element={<AuthScreen />} />
+          <Route path="/auth/reset" element={<ResetPasswordScreen />} />
 
           {/* Main tabs */}
           <Route path="/home" element={<DashboardScreen />} />

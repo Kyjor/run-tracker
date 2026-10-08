@@ -119,6 +119,8 @@ export interface ActivePlan {
   id: string;
   plan_id: string;
   start_date: string; // YYYY-MM-DD
+  /** Race day for this activation, YYYY-MM-DD */
+  race_date: string | null;
   is_active: number;  // 0 or 1
   created_at: string;
   sync_status: SyncStatus;
@@ -154,6 +156,8 @@ export interface Run {
   run_type: RunType;
   plan_day_id: string | null;
   notes: string;
+  /** 1 easy … 5 max. Null when the runner did not rate it. */
+  effort: number | null;
   source: 'manual' | 'healthkit' | 'fit' | 'live';
 
   // ── Heart Rate ──────────────────────────────────────────

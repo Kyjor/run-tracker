@@ -15,10 +15,15 @@ struct FitImportEventPayload {
 }
 
 static PENDING_FIT_FILE: OnceLock<Mutex<Option<PendingFitFile>>> = OnceLock::new();
+static PENDING_AUTH_URL: OnceLock<Mutex<Option<String>>> = OnceLock::new();
 static APP_HANDLE: OnceLock<AppHandle> = OnceLock::new();
 
 fn pending_fit_file() -> &'static Mutex<Option<PendingFitFile>> {
     PENDING_FIT_FILE.get_or_init(|| Mutex::new(None))
+}
+
+fn pending_auth_url() -> &'static Mutex<Option<String>> {
+    PENDING_AUTH_URL.get_or_init(|| Mutex::new(None))
 }
 
 // ---------------------------------------------------------------------------
@@ -71,6 +76,15 @@ extern "C" {
 
     #[link_name = "cancel_live_run"]
     fn lt_cancel_live_run() -> i32;
+
+    #[link_name = "pause_live_run"]
+    fn lt_pause_live_run() -> i32;
+
+    #[link_name = "resume_live_run"]
+    fn lt_resume_live_run() -> i32;
+
+    #[link_name = "play_run_haptic"]
+    fn lt_play_run_haptic() -> i32;
 
     #[link_name = "get_live_run_snapshot"]
     fn lt_get_live_run_snapshot(
@@ -148,6 +162,10 @@ pub struct LiveRunSnapshot {
     pub max_heart_rate: Option<f64>,
     #[serde(default)]
     pub min_heart_rate: Option<f64>,
+    #[serde(default)]
+    pub paused_total_ms: f64,
+    #[serde(default)]
+    pub pause_started_ms: Option<f64>,
 }
 
 impl LiveRunSnapshot {
@@ -164,6 +182,8 @@ impl LiveRunSnapshot {
             avg_heart_rate: None,
             max_heart_rate: None,
             min_heart_rate: None,
+            paused_total_ms: 0.0,
+            pause_started_ms: None,
         }
     }
 }
@@ -456,6 +476,54 @@ async fn stop_live_run() -> Result<LiveRunSnapshot, String> {
 }
 
 #[tauri::command]
+async fn pause_live_run() -> Result<(), String> {
+    #[cfg(target_os = "ios")]
+    {
+        let code = unsafe { lt_pause_live_run() };
+        if code < 0 {
+            return Err(String::from("pause_live_run failed"));
+        }
+        Ok(())
+    }
+    #[cfg(not(target_os = "ios"))]
+    {
+        Err(String::from("Native live tracking is only available on iOS"))
+    }
+}
+
+#[tauri::command]
+async fn resume_live_run() -> Result<(), String> {
+    #[cfg(target_os = "ios")]
+    {
+        let code = unsafe { lt_resume_live_run() };
+        if code < 0 {
+            return Err(String::from("resume_live_run failed"));
+        }
+        Ok(())
+    }
+    #[cfg(not(target_os = "ios"))]
+    {
+        Err(String::from("Native live tracking is only available on iOS"))
+    }
+}
+
+#[tauri::command]
+async fn play_run_haptic() -> Result<(), String> {
+    #[cfg(target_os = "ios")]
+    {
+        let code = unsafe { lt_play_run_haptic() };
+        if code < 0 {
+            return Err(String::from("haptic failed"));
+        }
+        Ok(())
+    }
+    #[cfg(not(target_os = "ios"))]
+    {
+        Ok(())
+    }
+}
+
+#[tauri::command]
 async fn cancel_live_run() -> Result<(), String> {
     #[cfg(target_os = "ios")]
     {
@@ -635,6 +703,11 @@ async fn is_remove_ads_owned() -> Result<bool, String> {
     }
 }
 
+#[tauri::command]
+fn consume_pending_auth_callback() -> Option<String> {
+    pending_auth_url().lock().ok().and_then(|mut lock| lock.take())
+}
+
 fn stage_fit_file_from_url(url: &tauri::Url) -> Option<PendingFitFile> {
     if url.scheme() != "file" {
         return None;
@@ -708,10 +781,14 @@ pub fn run() {
             fetch_healthkit_workouts,
             fetch_workout_details,
             consume_pending_fit_file,
+            consume_pending_auth_callback,
             is_native_live_tracking_available,
             request_location_permission,
             start_live_run,
             stop_live_run,
+            pause_live_run,
+            resume_live_run,
+            play_run_haptic,
             cancel_live_run,
             get_live_run_snapshot,
             hrm_start_scan,
@@ -730,6 +807,14 @@ pub fn run() {
     app.run(|app_handle, event| {
         if let tauri::RunEvent::Opened { urls } = event {
             for url in urls {
+                if url.scheme() == "run4fun" {
+                    let callback = url.as_str().to_string();
+                    if let Ok(mut lock) = pending_auth_url().lock() {
+                        *lock = Some(callback.clone());
+                    }
+                    let _ = app_handle.emit("auth-callback", callback);
+                    continue;
+                }
                 if let Some(pending) = stage_fit_file_from_url(&url) {
                     if let Ok(mut lock) = pending_fit_file().lock() {
                         let file_name = pending.file_name.clone();

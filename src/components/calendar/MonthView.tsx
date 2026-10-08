@@ -49,13 +49,12 @@ export function MonthView({ activePlan, activePlanDetails, onSelectDate, selecte
     return map;
   }, [planDays, activePlan]);
 
-  // Build map: isoDate -> Run (extract date portion from datetime)
   const runMap = useMemo(() => {
-    const map: Record<string, Run> = {};
+    const map: Record<string, Run[]> = {};
     for (const run of runs) {
       const dateKey = extractDate(run.date);
-      // Use first run if multiple runs on same day
-      if (!map[dateKey]) map[dateKey] = run;
+      if (!map[dateKey]) map[dateKey] = [];
+      map[dateKey].push(run);
     }
     return map;
   }, [runs]);
@@ -101,7 +100,7 @@ export function MonthView({ activePlan, activePlanDetails, onSelectDate, selecte
               key={iso}
               date={date}
               planDay={planDayMap[iso] ?? null}
-              run={runMap[iso] ?? null}
+              runs={runMap[iso] ?? []}
               isCurrentMonth={date.getMonth() === currentMonth}
               isToday={isToday(date)}
               isSelected={selectedDate === iso}

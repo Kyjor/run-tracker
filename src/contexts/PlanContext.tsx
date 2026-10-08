@@ -1,6 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import type { TrainingPlan, ActivePlan, TodayActivity, DistanceUnit, Run } from '../types';
-import { getActivePlan, getPlanById, getPlanDayForDate } from '../services/planService';
+import { getActivePlan, getPlanById, getPlanDayForDate, getWeekAdherence } from '../services/planService';
 import { getRunsForDate } from '../services/runService';
 import { currentPlanPosition, today, extractDate } from '../utils/dateUtils';
 import { useDatabase } from './DatabaseContext';
@@ -12,6 +12,7 @@ interface PlanContextValue {
   todayActivity: TodayActivity | null;
   weekNumber: number | null;
   dayOfWeek: number | null;
+  weekProgress: { completed: number; total: number; missed: number };
   isLoading: boolean;
   refresh: () => Promise<void>;
 }
@@ -22,6 +23,7 @@ const PlanContext = createContext<PlanContextValue>({
   todayActivity: null,
   weekNumber: null,
   dayOfWeek: null,
+  weekProgress: { completed: 0, total: 0, missed: 0 },
   isLoading: true,
   refresh: async () => {},
 });
@@ -33,6 +35,7 @@ export function PlanProvider({ children }: { children: React.ReactNode }) {
   const [todayActivity, setTodayActivity] = useState<TodayActivity | null>(null);
   const [weekNumber, setWeekNumber] = useState<number | null>(null);
   const [dayOfWeek, setDayOfWeek] = useState<number | null>(null);
+  const [weekProgress, setWeekProgress] = useState({ completed: 0, total: 0, missed: 0 });
   const [isLoading, setIsLoading] = useState(true);
 
   const load = useCallback(async () => {
@@ -49,6 +52,11 @@ export function PlanProvider({ children }: { children: React.ReactNode }) {
         const pos = details ? currentPlanPosition(ap.start_date, details.duration_weeks) : null;
         setWeekNumber(pos?.weekNumber ?? null);
         setDayOfWeek(pos?.dayOfWeek ?? null);
+        if (details) {
+          setWeekProgress(await getWeekAdherence(db, ap, details.duration_weeks));
+        } else {
+          setWeekProgress({ completed: 0, total: 0, missed: 0 });
+        }
 
         if (pos && details) {
           const planDay = await getPlanDayForDate(db, ap.plan_id, pos.weekNumber, pos.dayOfWeek);
@@ -138,6 +146,7 @@ export function PlanProvider({ children }: { children: React.ReactNode }) {
         setTodayActivity(null);
         setWeekNumber(null);
         setDayOfWeek(null);
+        setWeekProgress({ completed: 0, total: 0, missed: 0 });
       }
     } finally {
       setIsLoading(false);
@@ -155,6 +164,7 @@ export function PlanProvider({ children }: { children: React.ReactNode }) {
       todayActivity,
       weekNumber,
       dayOfWeek,
+      weekProgress,
       isLoading,
       refresh: load,
     }}>

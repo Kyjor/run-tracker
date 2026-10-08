@@ -29,7 +29,7 @@ export function RunDetailSocial({ runId, ownerUserId }: RunDetailSocialProps) {
 
   if (!activityId) return null;
 
-  async function handleKudos() {
+  async function handleLike() {
     await toggleLike(activityId!);
     setLiked((v) => !v);
     setLikesCount((c) => c + (liked ? -1 : 1));
@@ -39,11 +39,11 @@ export function RunDetailSocial({ runId, ownerUserId }: RunDetailSocialProps) {
     <>
       <Card>
         <div className="flex items-center gap-6">
-          <button type="button" onClick={handleKudos} className="flex items-center gap-2 text-sm font-medium">
-            <svg viewBox="0 0 24 24" className={`w-5 h-5 ${liked ? 'text-kudos-500 fill-kudos-500' : 'text-ink-muted'}`} fill={liked ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth={1.8}>
+          <button type="button" onClick={handleLike} className="flex items-center gap-2 text-sm font-medium">
+            <svg viewBox="0 0 24 24" className={`w-5 h-5 ${liked ? 'text-like-500 fill-like-500' : 'text-ink-muted'}`} fill={liked ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth={1.8}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z" />
             </svg>
-            {likesCount > 0 ? `${likesCount} kudos` : 'Give kudos'}
+            {likesCount === 1 ? '1 like' : likesCount > 1 ? `${likesCount} likes` : 'Like'}
           </button>
           <button type="button" onClick={() => setCommentOpen(true)} className="text-sm text-ink-secondary">
             {commentsCount > 0 ? `${commentsCount} comments` : 'Comment'}

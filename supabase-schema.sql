@@ -35,7 +35,11 @@ BEGIN
   );
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+
+REVOKE ALL ON FUNCTION public.handle_new_user() FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.handle_new_user() FROM anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.handle_new_user() TO supabase_auth_admin;
 
 DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created
@@ -57,7 +61,8 @@ CREATE TABLE IF NOT EXISTS user_runs (
   run_type TEXT NOT NULL CHECK (run_type IN ('easy_run', 'pace_run', 'tempo_run', 'long_run', 'intervals', 'race', 'other')),
   plan_day_id TEXT,
   notes TEXT NOT NULL DEFAULT '',
-  source TEXT NOT NULL DEFAULT 'manual' CHECK (source IN ('manual', 'healthkit')),
+  source TEXT NOT NULL DEFAULT 'manual' CHECK (source IN ('manual', 'healthkit', 'fit', 'live')),
+  effort INTEGER,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE(user_id, id)
@@ -92,6 +97,7 @@ CREATE TABLE IF NOT EXISTS active_plans (
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   plan_id TEXT NOT NULL,
   start_date DATE NOT NULL,
+  race_date DATE,
   is_active BOOLEAN NOT NULL DEFAULT true,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE(user_id, id)
@@ -222,6 +228,7 @@ CREATE INDEX IF NOT EXISTS idx_user_runs_user_date ON user_runs(user_id, date DE
 CREATE INDEX IF NOT EXISTS idx_user_goals_user ON user_goals(user_id);
 CREATE INDEX IF NOT EXISTS idx_active_plans_user ON active_plans(user_id);
 CREATE INDEX IF NOT EXISTS idx_user_run_routes_user_run ON user_run_routes(user_id, run_id);
+CREATE INDEX IF NOT EXISTS idx_user_run_routes_run ON user_run_routes(run_id);
 
 -- Ensure only one active plan per user (unique partial index)
 CREATE UNIQUE INDEX IF NOT EXISTS idx_active_plans_one_per_user 
@@ -234,10 +241,13 @@ CREATE INDEX IF NOT EXISTS idx_follows_following ON follows(following_id);
 CREATE INDEX IF NOT EXISTS idx_feed_activities_user ON feed_activities(user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_feed_likes_activity ON feed_likes(activity_id);
 CREATE INDEX IF NOT EXISTS idx_feed_comments_activity ON feed_comments(activity_id);
+CREATE INDEX IF NOT EXISTS idx_feed_comments_user ON feed_comments(user_id);
+CREATE INDEX IF NOT EXISTS idx_community_plans_author ON community_plans(author_id);
 CREATE INDEX IF NOT EXISTS idx_community_plans_race ON community_plans(race_type, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_plan_upvotes_plan ON plan_upvotes(plan_id);
 CREATE INDEX IF NOT EXISTS idx_plan_ratings_plan ON plan_ratings(plan_id);
 CREATE INDEX IF NOT EXISTS idx_plan_comments_plan ON plan_comments(plan_id);
+CREATE INDEX IF NOT EXISTS idx_plan_comments_user ON plan_comments(user_id);
 
 -- ============================================================
 -- 6. Triggers & Functions
@@ -250,7 +260,7 @@ BEGIN
   NEW.updated_at = NOW();
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SET search_path = public;
 
 CREATE TRIGGER update_profiles_updated_at BEFORE UPDATE ON profiles
   FOR EACH ROW EXECUTE FUNCTION update_updated_at();
@@ -274,7 +284,7 @@ BEGIN
   END IF;
   RETURN COALESCE(NEW, OLD);
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SET search_path = public;
 
 CREATE TRIGGER update_upvote_count_on_insert
   AFTER INSERT ON plan_upvotes
@@ -303,7 +313,7 @@ BEGIN
   END IF;
   RETURN COALESCE(NEW, OLD);
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SET search_path = public;
 
 CREATE TRIGGER update_rating_stats_on_insert
   AFTER INSERT ON plan_ratings
@@ -320,6 +330,26 @@ CREATE TRIGGER update_rating_stats_on_delete
 -- ============================================================
 -- 7. Row Level Security (RLS)
 -- ============================================================
+
+CREATE OR REPLACE FUNCTION public.is_mutual_follow(other_id uuid)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY INVOKER
+SET search_path = public
+AS $$
+  SELECT
+    (SELECT auth.uid()) IS NOT NULL
+    AND other_id IS DISTINCT FROM (SELECT auth.uid())
+    AND EXISTS (
+      SELECT 1 FROM public.follows
+      WHERE follower_id = (SELECT auth.uid()) AND following_id = other_id
+    )
+    AND EXISTS (
+      SELECT 1 FROM public.follows
+      WHERE follower_id = other_id AND following_id = (SELECT auth.uid())
+    );
+$$;
 
 -- Enable RLS on all tables
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
@@ -338,119 +368,228 @@ ALTER TABLE plan_upvotes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE plan_ratings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE plan_comments ENABLE ROW LEVEL SECURITY;
 
--- Profiles: users can read their own or public profiles, update their own
-CREATE POLICY "Users can view own profile" ON profiles
-  FOR SELECT USING (auth.uid() = id);
-CREATE POLICY "Users can view public profiles" ON profiles
-  FOR SELECT USING (is_public = true);
+-- One SELECT policy per table. auth.uid() is wrapped so it runs once per query.
+-- Profiles: own, public search, or mutual follows
+CREATE POLICY "Users can view profiles" ON profiles
+  FOR SELECT USING (
+    (SELECT auth.uid()) = id
+    OR is_public = true
+    OR public.is_mutual_follow(id)
+  );
 CREATE POLICY "Users can update own profile" ON profiles
-  FOR UPDATE USING (auth.uid() = id);
+  FOR UPDATE
+  USING ((SELECT auth.uid()) = id)
+  WITH CHECK ((SELECT auth.uid()) = id);
 CREATE POLICY "Users can insert own profile" ON profiles
-  FOR INSERT WITH CHECK (auth.uid() = id);
+  FOR INSERT WITH CHECK ((SELECT auth.uid()) = id);
 
--- User Runs: users can only access their own
-CREATE POLICY "Users can manage own runs" ON user_runs
-  FOR ALL USING (auth.uid() = user_id);
+-- User Runs: own rows, plus mutual follows
+CREATE POLICY "Users can view runs" ON user_runs
+  FOR SELECT USING (user_id = (SELECT auth.uid()) OR public.is_mutual_follow(user_id));
+CREATE POLICY "Users can insert own runs" ON user_runs
+  FOR INSERT WITH CHECK (user_id = (SELECT auth.uid()));
+CREATE POLICY "Users can update own runs" ON user_runs
+  FOR UPDATE
+  USING (user_id = (SELECT auth.uid()))
+  WITH CHECK (user_id = (SELECT auth.uid()));
+CREATE POLICY "Users can delete own runs" ON user_runs
+  FOR DELETE USING (user_id = (SELECT auth.uid()));
 
--- User Run Routes: users can only access their own GPS data
-CREATE POLICY "Users can manage own run routes" ON user_run_routes
-  FOR ALL USING (auth.uid() = user_id);
+-- User Run Routes
+CREATE POLICY "Users can view routes" ON user_run_routes
+  FOR SELECT USING (user_id = (SELECT auth.uid()) OR public.is_mutual_follow(user_id));
+CREATE POLICY "Users can insert own routes" ON user_run_routes
+  FOR INSERT WITH CHECK (user_id = (SELECT auth.uid()));
+CREATE POLICY "Users can update own routes" ON user_run_routes
+  FOR UPDATE
+  USING (user_id = (SELECT auth.uid()))
+  WITH CHECK (user_id = (SELECT auth.uid()));
+CREATE POLICY "Users can delete own routes" ON user_run_routes
+  FOR DELETE USING (user_id = (SELECT auth.uid()));
 
--- User Goals: users can only access their own
+-- User Goals
 CREATE POLICY "Users can manage own goals" ON user_goals
-  FOR ALL USING (auth.uid() = user_id);
+  FOR ALL
+  USING (user_id = (SELECT auth.uid()))
+  WITH CHECK (user_id = (SELECT auth.uid()));
 
--- Active Plans: users can only access their own
-CREATE POLICY "Users can manage own active plans" ON active_plans
-  FOR ALL USING (auth.uid() = user_id);
+-- Active Plans
+CREATE POLICY "Users can view active plans" ON active_plans
+  FOR SELECT USING (user_id = (SELECT auth.uid()) OR public.is_mutual_follow(user_id));
+CREATE POLICY "Users can insert own active plans" ON active_plans
+  FOR INSERT WITH CHECK (user_id = (SELECT auth.uid()));
+CREATE POLICY "Users can update own active plans" ON active_plans
+  FOR UPDATE
+  USING (user_id = (SELECT auth.uid()))
+  WITH CHECK (user_id = (SELECT auth.uid()));
+CREATE POLICY "Users can delete own active plans" ON active_plans
+  FOR DELETE USING (user_id = (SELECT auth.uid()));
 
--- Training Plans: users can only access their own custom plans
-CREATE POLICY "Users can manage own plans" ON training_plans
-  FOR ALL USING (auth.uid() = user_id);
-
--- Plan Days: users can only access days of their own plans
-CREATE POLICY "Users can manage own plan days" ON plan_days
-  FOR ALL USING (
-    EXISTS (
-      SELECT 1 FROM training_plans
-      WHERE training_plans.id = plan_days.plan_id
-      AND training_plans.user_id = auth.uid()
-    )
-  );
-
--- Follows: users can view all, but only manage their own
-CREATE POLICY "Users can view all follows" ON follows
-  FOR SELECT USING (true);
-CREATE POLICY "Users can manage own follows" ON follows
-  FOR ALL USING (auth.uid() = follower_id);
-
--- Feed Activities: users can view activities from people they follow or their own
-CREATE POLICY "Users can view feed activities" ON feed_activities
+-- Training Plans: own plans, or plans of someone you follow
+CREATE POLICY "Users can view training plans" ON training_plans
   FOR SELECT USING (
-    user_id = auth.uid() OR
-    EXISTS (
+    user_id = (SELECT auth.uid())
+    OR EXISTS (
       SELECT 1 FROM follows
-      WHERE follows.follower_id = auth.uid()
-      AND follows.following_id = feed_activities.user_id
+      WHERE follows.follower_id = (SELECT auth.uid())
+      AND follows.following_id = training_plans.user_id
     )
   );
-CREATE POLICY "Users can insert own activities" ON feed_activities
-  FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users can insert own plans" ON training_plans
+  FOR INSERT WITH CHECK (user_id = (SELECT auth.uid()));
+CREATE POLICY "Users can update own plans" ON training_plans
+  FOR UPDATE
+  USING (user_id = (SELECT auth.uid()))
+  WITH CHECK (user_id = (SELECT auth.uid()));
+CREATE POLICY "Users can delete own plans" ON training_plans
+  FOR DELETE USING (user_id = (SELECT auth.uid()));
 
--- Feed Likes: users can view all, manage their own
-CREATE POLICY "Users can view all likes" ON feed_likes
-  FOR SELECT USING (true);
-CREATE POLICY "Users can manage own likes" ON feed_likes
-  FOR ALL USING (auth.uid() = user_id);
-
--- Feed Comments: users can view comments on activities they can see (own or from people they follow)
-CREATE POLICY "Users can view comments on visible activities" ON feed_comments
+-- Plan Days: days on your plans, or plans of someone you follow
+CREATE POLICY "Users can view plan days" ON plan_days
   FOR SELECT USING (
     EXISTS (
-      SELECT 1 FROM feed_activities
-      WHERE feed_activities.id = feed_comments.activity_id
+      SELECT 1 FROM training_plans tp
+      WHERE tp.id = plan_days.plan_id
       AND (
-        feed_activities.user_id = auth.uid() OR
-        EXISTS (
+        tp.user_id = (SELECT auth.uid())
+        OR EXISTS (
           SELECT 1 FROM follows
-          WHERE follows.follower_id = auth.uid()
-          AND follows.following_id = feed_activities.user_id
+          WHERE follows.follower_id = (SELECT auth.uid())
+          AND follows.following_id = tp.user_id
         )
       )
     )
   );
-CREATE POLICY "Users can manage own comments" ON feed_comments
-  FOR ALL USING (auth.uid() = user_id);
+CREATE POLICY "Users can insert own plan days" ON plan_days
+  FOR INSERT WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM training_plans
+      WHERE training_plans.id = plan_days.plan_id
+      AND training_plans.user_id = (SELECT auth.uid())
+    )
+  );
+CREATE POLICY "Users can update own plan days" ON plan_days
+  FOR UPDATE
+  USING (
+    EXISTS (
+      SELECT 1 FROM training_plans
+      WHERE training_plans.id = plan_days.plan_id
+      AND training_plans.user_id = (SELECT auth.uid())
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM training_plans
+      WHERE training_plans.id = plan_days.plan_id
+      AND training_plans.user_id = (SELECT auth.uid())
+    )
+  );
+CREATE POLICY "Users can delete own plan days" ON plan_days
+  FOR DELETE USING (
+    EXISTS (
+      SELECT 1 FROM training_plans
+      WHERE training_plans.id = plan_days.plan_id
+      AND training_plans.user_id = (SELECT auth.uid())
+    )
+  );
 
--- Community Plans: everyone can read, authors can update/delete
+-- Follows: anyone can read, you only write your own
+CREATE POLICY "Users can view all follows" ON follows
+  FOR SELECT USING (true);
+CREATE POLICY "Users can insert own follows" ON follows
+  FOR INSERT WITH CHECK (follower_id = (SELECT auth.uid()));
+CREATE POLICY "Users can update own follows" ON follows
+  FOR UPDATE
+  USING (follower_id = (SELECT auth.uid()))
+  WITH CHECK (follower_id = (SELECT auth.uid()));
+CREATE POLICY "Users can delete own follows" ON follows
+  FOR DELETE USING (follower_id = (SELECT auth.uid()));
+
+-- Feed Activities
+CREATE POLICY "Users can view feed activities" ON feed_activities
+  FOR SELECT USING (
+    user_id = (SELECT auth.uid()) OR public.is_mutual_follow(user_id)
+  );
+CREATE POLICY "Users can insert own activities" ON feed_activities
+  FOR INSERT WITH CHECK (user_id = (SELECT auth.uid()));
+
+-- Feed Likes
+CREATE POLICY "Users can view all likes" ON feed_likes
+  FOR SELECT USING (true);
+CREATE POLICY "Users can insert own likes" ON feed_likes
+  FOR INSERT WITH CHECK (user_id = (SELECT auth.uid()));
+CREATE POLICY "Users can update own likes" ON feed_likes
+  FOR UPDATE
+  USING (user_id = (SELECT auth.uid()))
+  WITH CHECK (user_id = (SELECT auth.uid()));
+CREATE POLICY "Users can delete own likes" ON feed_likes
+  FOR DELETE USING (user_id = (SELECT auth.uid()));
+
+-- Feed Comments
+CREATE POLICY "Users can view comments on visible activities" ON feed_comments
+  FOR SELECT USING (
+    user_id = (SELECT auth.uid())
+    OR EXISTS (
+      SELECT 1 FROM feed_activities
+      WHERE feed_activities.id = feed_comments.activity_id
+      AND (
+        feed_activities.user_id = (SELECT auth.uid())
+        OR public.is_mutual_follow(feed_activities.user_id)
+      )
+    )
+  );
+CREATE POLICY "Users can insert own comments" ON feed_comments
+  FOR INSERT WITH CHECK (user_id = (SELECT auth.uid()));
+CREATE POLICY "Users can update own comments" ON feed_comments
+  FOR UPDATE
+  USING (user_id = (SELECT auth.uid()))
+  WITH CHECK (user_id = (SELECT auth.uid()));
+CREATE POLICY "Users can delete own comments" ON feed_comments
+  FOR DELETE USING (user_id = (SELECT auth.uid()));
+
+-- Community Plans
 CREATE POLICY "Everyone can view community plans" ON community_plans
   FOR SELECT USING (true);
 CREATE POLICY "Users can create community plans" ON community_plans
-  FOR INSERT WITH CHECK (auth.uid() = author_id);
+  FOR INSERT WITH CHECK (author_id = (SELECT auth.uid()));
 CREATE POLICY "Authors can update own plans" ON community_plans
-  FOR UPDATE USING (auth.uid() = author_id);
+  FOR UPDATE
+  USING (author_id = (SELECT auth.uid()))
+  WITH CHECK (author_id = (SELECT auth.uid()));
 CREATE POLICY "Authors can delete own plans" ON community_plans
-  FOR DELETE USING (auth.uid() = author_id);
+  FOR DELETE USING (author_id = (SELECT auth.uid()));
 
--- Plan Upvotes: everyone can view, users can manage their own
+-- Plan Upvotes
 CREATE POLICY "Everyone can view upvotes" ON plan_upvotes
   FOR SELECT USING (true);
-CREATE POLICY "Users can manage own upvotes" ON plan_upvotes
-  FOR ALL USING (auth.uid() = user_id);
+CREATE POLICY "Users can insert own upvotes" ON plan_upvotes
+  FOR INSERT WITH CHECK (user_id = (SELECT auth.uid()));
+CREATE POLICY "Users can update own upvotes" ON plan_upvotes
+  FOR UPDATE
+  USING (user_id = (SELECT auth.uid()))
+  WITH CHECK (user_id = (SELECT auth.uid()));
+CREATE POLICY "Users can delete own upvotes" ON plan_upvotes
+  FOR DELETE USING (user_id = (SELECT auth.uid()));
 
--- Plan Ratings: everyone can view, users can manage their own
+-- Plan Ratings
 CREATE POLICY "Everyone can view ratings" ON plan_ratings
   FOR SELECT USING (true);
-CREATE POLICY "Users can manage own ratings" ON plan_ratings
-  FOR ALL USING (auth.uid() = user_id);
+CREATE POLICY "Users can insert own ratings" ON plan_ratings
+  FOR INSERT WITH CHECK (user_id = (SELECT auth.uid()));
+CREATE POLICY "Users can update own ratings" ON plan_ratings
+  FOR UPDATE
+  USING (user_id = (SELECT auth.uid()))
+  WITH CHECK (user_id = (SELECT auth.uid()));
+CREATE POLICY "Users can delete own ratings" ON plan_ratings
+  FOR DELETE USING (user_id = (SELECT auth.uid()));
 
--- Plan Comments: everyone can view, users can manage their own
+-- Plan Comments
 CREATE POLICY "Everyone can view plan comments" ON plan_comments
   FOR SELECT USING (true);
 CREATE POLICY "Users can create plan comments" ON plan_comments
-  FOR INSERT WITH CHECK (auth.uid() = user_id);
+  FOR INSERT WITH CHECK (user_id = (SELECT auth.uid()));
 CREATE POLICY "Users can delete own plan comments" ON plan_comments
-  FOR DELETE USING (auth.uid() = user_id);
+  FOR DELETE USING (user_id = (SELECT auth.uid()));
 
 -- ============================================================
 -- Done! Your Supabase database is ready.

@@ -17,6 +17,7 @@ export interface CreateRunInput {
   run_type: RunType;
   plan_day_id?: string | null;
   notes?: string;
+  effort?: number | null;
   source?: 'manual' | 'healthkit' | 'fit' | 'live';
 
   // Heart Rate
@@ -145,6 +146,7 @@ export async function createRun(db: Database, input: CreateRunInput): Promise<Ru
     run_type: input.run_type,
     plan_day_id: input.plan_day_id ?? null,
     notes: input.notes ?? '',
+    effort: input.effort ?? null,
     source: input.source ?? 'manual',
 
     avg_heart_rate: input.avg_heart_rate ?? null,
@@ -187,7 +189,7 @@ export async function createRun(db: Database, input: CreateRunInput): Promise<Ru
       elevation_gain_meters, elevation_loss_meters,
       vo2_max,
       temperature_celsius, humidity_percent, weather_condition,
-      calories, has_route,
+      calories, has_route, effort,
       created_at, updated_at, sync_status
     ) VALUES (
       $1,$2,$3,$4,$5,$6,
@@ -198,8 +200,8 @@ export async function createRun(db: Database, input: CreateRunInput): Promise<Ru
       $20,$21,
       $22,
       $23,$24,$25,
-      $26,$27,
-      $28,$28,'local'
+      $26,$27,$28,
+      $29,$29,'local'
     )`,
     [
       run.id, run.date, run.distance_value, run.distance_unit, run.duration_seconds, run.run_type,
@@ -210,7 +212,7 @@ export async function createRun(db: Database, input: CreateRunInput): Promise<Ru
       run.elevation_gain_meters, run.elevation_loss_meters,
       run.vo2_max,
       run.temperature_celsius, run.humidity_percent, run.weather_condition,
-      run.calories, run.has_route,
+      run.calories, run.has_route, run.effort,
       now,
     ],
   );

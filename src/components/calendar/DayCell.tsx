@@ -6,18 +6,18 @@ import { useSettings } from '../../contexts/SettingsContext';
 interface DayCellProps {
   date: Date;
   planDay?: PlanDay | null;
-  run?: Run | null;
+  runs?: Run[];
   isCurrentMonth: boolean;
   isToday: boolean;
   isSelected: boolean;
   onClick: () => void;
 }
 
-export function DayCell({ date, planDay, run, isCurrentMonth, isToday, isSelected, onClick }: DayCellProps) {
+export function DayCell({ date, planDay, runs = [], isCurrentMonth, isToday, isSelected, onClick }: DayCellProps) {
   const { settings } = useSettings();
   const dayNum = date.getDate();
   const color = planDay ? ACTIVITY_COLORS[planDay.activity_type] : undefined;
-  const isCompleted = !!run;
+  const isCompleted = runs.length > 0;
 
   return (
     <button
@@ -68,8 +68,10 @@ export function DayCell({ date, planDay, run, isCurrentMonth, isToday, isSelecte
       )}
 
       {/* Completion checkmark overlay */}
-      {isCompleted && planDay && planDay.activity_type !== 'rest' && (
-        <span className="absolute top-0.5 right-0.5 text-[9px]">✓</span>
+      {isCompleted && (
+        <span className="absolute top-0.5 right-0.5 text-[9px] font-semibold text-primary-600">
+          {runs.length > 1 ? runs.length : '✓'}
+        </span>
       )}
     </button>
   );

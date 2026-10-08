@@ -12,7 +12,7 @@ import { useDb } from '../contexts/DatabaseContext';
 import { usePlan } from '../contexts/PlanContext';
 import { useToast } from '../contexts/ToastContext';
 import { useSettings } from '../contexts/SettingsContext';
-import { getPlanById, getPlanDays, setActivePlan, clearActivePlan, exportPlanToFormat, deletePlan } from '../services/planService';
+import { getPlanById, getPlanDays, setActivePlan, clearActivePlan, setRaceDate, exportPlanToFormat, deletePlan } from '../services/planService';
 import { ConfirmModal } from '../components/ui/Modal';
 import { WorkoutDisplay, EstimatedTimeBadge } from '../components/workout/WorkoutDisplay';
 import { formatDistance } from '../utils/paceUtils';
@@ -39,6 +39,7 @@ export function PlanDetailScreen() {
   const [plan, setPlan] = useState<TrainingPlan | null>(null);
   const [days, setDays] = useState<PlanDay[]>([]);
   const [startDate, setStartDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const [raceDate, setRaceDateValue] = useState(activePlan?.race_date ?? '');
   const [activating, setActivating] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [deleteModal, setDeleteModal] = useState(false);
@@ -54,14 +55,18 @@ export function PlanDetailScreen() {
 
   useEffect(() => { load(); }, [load]);
 
+  useEffect(() => {
+    setRaceDateValue(activePlan?.race_date ?? '');
+  }, [activePlan?.race_date, activePlan?.plan_id]);
+
   const isActive = activePlan?.plan_id === id;
 
   async function handleActivate() {
     if (!id) return;
     setActivating(true);
-    await setActivePlan(db, id, startDate);
+    await setActivePlan(db, id, startDate, raceDate || null);
     await refresh();
-    showToast('Plan activated! Let\'s go 🏃', 'success');
+    showToast('Plan activated', 'success');
     setActivating(false);
     setShowDatePicker(false);
   }
@@ -129,11 +134,31 @@ export function PlanDetailScreen() {
         {isActive ? (
           <div className="flex flex-col gap-2">
             <div className="flex items-center gap-2 bg-primary-50 dark:bg-primary-900/20 rounded-2xl p-4">
-              <span className="text-primary-600 dark:text-primary-400 font-semibold text-sm">✓ Currently Active</span>
+              <span className="text-primary-600 dark:text-primary-400 font-semibold text-sm">Active</span>
               <span className="text-xs text-gray-400 ml-auto">
                 Started {activePlan!.start_date}
               </span>
             </div>
+            <Card>
+              <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Race day</p>
+              <input
+                type="date"
+                value={raceDate}
+                onChange={e => setRaceDateValue(e.target.value)}
+                className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white px-3 py-2 mb-3"
+              />
+              <Button
+                variant="secondary"
+                className="w-full"
+                onClick={async () => {
+                  await setRaceDate(db, raceDate || null);
+                  await refresh();
+                  showToast(raceDate ? 'Race day saved' : 'Race day cleared', 'success');
+                }}
+              >
+                Save race day
+              </Button>
+            </Card>
             <Button variant="secondary" className="w-full" onClick={() => setExitModal(true)}>
               End Plan Early
             </Button>
@@ -148,6 +173,13 @@ export function PlanDetailScreen() {
                   value={startDate}
                   onChange={e => setStartDate(e.target.value)}
                   className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white px-3 py-2 mb-3 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                />
+                <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Race day (optional)</p>
+                <input
+                  type="date"
+                  value={raceDate}
+                  onChange={e => setRaceDateValue(e.target.value)}
+                  className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white px-3 py-2 mb-3"
                 />
                 <Button size="lg" className="w-full" isLoading={activating} onClick={handleActivate}>
                   Activate Plan

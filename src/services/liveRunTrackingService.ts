@@ -14,7 +14,7 @@ export interface LiveRoutePoint extends RoutePoint {
 }
 
 export interface LiveRunSnapshot {
-  state: 'idle' | 'running';
+  state: 'idle' | 'running' | 'paused';
   started_at_ms: number;
   elapsed_seconds: number;
   distance_meters: number;
@@ -25,11 +25,17 @@ export interface LiveRunSnapshot {
   avg_heart_rate?: number | null;
   max_heart_rate?: number | null;
   min_heart_rate?: number | null;
+  paused_total_ms?: number;
+  pause_started_ms?: number | null;
 }
 
 const LIVE_RUN_TICK_EVENT = 'live-run-tick';
 
 let nativeAvailableCache: boolean | null = null;
+
+const AUTO_PAUSE_SPEED_MPS = 0.45;
+const AUTO_RESUME_SPEED_MPS = 1.2;
+const AUTO_PAUSE_AFTER_MS = 8000;
 
 interface WebSession {
   watchId: number | null;
@@ -37,6 +43,11 @@ interface WebSession {
   startTimeMs: number | null;
   points: LiveRoutePoint[];
   distanceMeters: number;
+  state: 'idle' | 'running' | 'paused';
+  pausedTotalMs: number;
+  pauseStartedMs: number | null;
+  manualPause: boolean;
+  slowSinceMs: number | null;
 }
 
 const webSession: WebSession = {
@@ -45,20 +56,28 @@ const webSession: WebSession = {
   startTimeMs: null,
   points: [],
   distanceMeters: 0,
+  state: 'idle',
+  pausedTotalMs: 0,
+  pauseStartedMs: null,
+  manualPause: false,
+  slowSinceMs: null,
 };
 
 const webListeners = new Set<(snapshot: LiveRunSnapshot) => void>();
 
-function webSnapshot(): LiveRunSnapshot {
-  const running = webSession.startTimeMs != null;
-  const elapsedSeconds = running
-    ? Math.max(0, Math.floor((Date.now() - webSession.startTimeMs!) / 1000))
-    : 0;
+function webElapsedSeconds(): number {
+  if (webSession.startTimeMs == null || webSession.state === 'idle') return 0;
+  const endMs = webSession.state === 'paused' && webSession.pauseStartedMs != null
+    ? webSession.pauseStartedMs
+    : Date.now();
+  return Math.max(0, Math.floor((endMs - webSession.startTimeMs - webSession.pausedTotalMs) / 1000));
+}
 
+function webSnapshot(): LiveRunSnapshot {
   return {
-    state: running ? 'running' : 'idle',
+    state: webSession.state,
     started_at_ms: webSession.startTimeMs ?? 0,
-    elapsed_seconds: elapsedSeconds,
+    elapsed_seconds: webElapsedSeconds(),
     distance_meters: webSession.distanceMeters,
     points: [...webSession.points],
     last_point: webSession.points.length > 0
@@ -69,6 +88,8 @@ function webSnapshot(): LiveRunSnapshot {
     avg_heart_rate: null,
     max_heart_rate: null,
     min_heart_rate: null,
+    paused_total_ms: webSession.pausedTotalMs,
+    pause_started_ms: webSession.pauseStartedMs,
   };
 }
 
@@ -99,6 +120,32 @@ function resetWebSession() {
   webSession.startTimeMs = null;
   webSession.points = [];
   webSession.distanceMeters = 0;
+  webSession.state = 'idle';
+  webSession.pausedTotalMs = 0;
+  webSession.pauseStartedMs = null;
+  webSession.manualPause = false;
+  webSession.slowSinceMs = null;
+}
+
+function pauseWebSession(manual: boolean) {
+  if (webSession.state !== 'running') return;
+  webSession.pauseStartedMs = Date.now();
+  webSession.state = 'paused';
+  webSession.manualPause = manual;
+  webSession.slowSinceMs = null;
+  notifyWebListeners();
+}
+
+function resumeWebSession() {
+  if (webSession.state !== 'paused') return;
+  if (webSession.pauseStartedMs != null) {
+    webSession.pausedTotalMs += Date.now() - webSession.pauseStartedMs;
+  }
+  webSession.pauseStartedMs = null;
+  webSession.state = 'running';
+  webSession.manualPause = false;
+  webSession.slowSinceMs = null;
+  notifyWebListeners();
 }
 
 function startWebWatch() {
@@ -117,11 +164,37 @@ function startWebWatch() {
         accuracy: accuracy ?? undefined,
       };
 
+      if (webSession.state === 'paused' && webSession.manualPause) return;
+
+      if (webSession.state === 'paused' && !webSession.manualPause) {
+        const last = webSession.points[webSession.points.length - 1];
+        if (last?.t) {
+          const dt = (t - last.t) / 1000;
+          const speed = dt > 0 ? haversineMeters(last, nextPoint) / dt : 0;
+          if (speed >= AUTO_RESUME_SPEED_MPS) resumeWebSession();
+        }
+        return;
+      }
+
+      if (webSession.state !== 'running') return;
+
       if (webSession.points.length === 0) {
         webSession.points = [nextPoint];
+        webSession.slowSinceMs = null;
       } else {
         const last = webSession.points[webSession.points.length - 1];
         const extra = haversineMeters(last, nextPoint);
+        const dt = last.t ? (t - last.t) / 1000 : 0;
+        const speed = dt > 0 ? extra / dt : 0;
+        if (speed < AUTO_PAUSE_SPEED_MPS) {
+          if (webSession.slowSinceMs == null) webSession.slowSinceMs = t;
+          else if (t - webSession.slowSinceMs >= AUTO_PAUSE_AFTER_MS) {
+            pauseWebSession(false);
+            return;
+          }
+        } else {
+          webSession.slowSinceMs = null;
+        }
         if (extra > 0) {
           webSession.distanceMeters += extra;
         }
@@ -182,6 +255,7 @@ export async function startLiveRun(): Promise<LiveRunSnapshot> {
 
   resetWebSession();
   webSession.startTimeMs = Date.now();
+  webSession.state = 'running';
   startWebWatch();
   webSession.timerId = window.setInterval(() => {
     notifyWebListeners();
@@ -189,6 +263,24 @@ export async function startLiveRun(): Promise<LiveRunSnapshot> {
   const snapshot = webSnapshot();
   notifyWebListeners();
   return snapshot;
+}
+
+export async function pauseLiveRun(): Promise<LiveRunSnapshot> {
+  if (await isNativeLiveTrackingAvailable()) {
+    await invoke('pause_live_run');
+    return getLiveRunSnapshot();
+  }
+  pauseWebSession(true);
+  return webSnapshot();
+}
+
+export async function resumeLiveRun(): Promise<LiveRunSnapshot> {
+  if (await isNativeLiveTrackingAvailable()) {
+    await invoke('resume_live_run');
+    return getLiveRunSnapshot();
+  }
+  resumeWebSession();
+  return webSnapshot();
 }
 
 export async function stopLiveRun(): Promise<LiveRunSnapshot> {

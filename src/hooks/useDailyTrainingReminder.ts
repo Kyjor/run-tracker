@@ -2,9 +2,11 @@ import { useEffect } from 'react';
 import { usePlan } from '../contexts/PlanContext';
 import { useSettings } from '../contexts/SettingsContext';
 import { useToast } from '../contexts/ToastContext';
+import { useDb } from '../contexts/DatabaseContext';
 import { ACTIVITY_LABELS } from '../types';
 import { formatDistance } from '../utils/paceUtils';
-import { today as todayIso } from '../utils/dateUtils';
+import { planDayToDate } from '../utils/dateUtils';
+import { getPlanDays } from '../services/planService';
 
 /**
  * Get current notification permission status.
@@ -49,7 +51,7 @@ export async function requestNotificationPermission(): Promise<{ granted: boolea
   // Try Tauri native notifications first (iOS / desktop)
   try {
     const { isTauri } = await import('@tauri-apps/api/core');
-    if (isTauri()) {
+    if (await isTauri()) {
       const { isPermissionGranted, requestPermission } = await import('@tauri-apps/plugin-notification');
       let granted = await isPermissionGranted();
       console.log('[Notifications] Current Tauri permission status:', granted ? 'granted' : 'denied');
@@ -108,48 +110,45 @@ export async function requestNotificationPermission(): Promise<{ granted: boolea
   return { granted: false, status: 'unknown', needsSettings: false };
 }
 
-const STORAGE_KEY_LAST_REMINDER = 'daily_training_reminder_last_fire_v1';
+const REMINDER_IDS = Array.from({ length: 21 }, (_, i) => 880000 + i);
 
-function loadLastFireDate(): string | null {
-  if (typeof window === 'undefined') return null;
-  try {
-    return window.localStorage.getItem(STORAGE_KEY_LAST_REMINDER);
-  } catch {
-    return null;
-  }
+function reminderAt(dateIso: string, hour: number, minute: number): Date {
+  const [year, month, day] = dateIso.split('-').map(Number);
+  return new Date(year, month - 1, day, hour, minute, 0, 0);
 }
 
-function saveLastFireDate(d: string) {
-  if (typeof window === 'undefined') return;
+async function clearScheduledReminders() {
   try {
-    window.localStorage.setItem(STORAGE_KEY_LAST_REMINDER, d);
+    const { isTauri } = await import('@tauri-apps/api/core');
+    if (!(await isTauri())) return;
+    const { cancel } = await import('@tauri-apps/plugin-notification');
+    await cancel(REMINDER_IDS);
   } catch {
-    // ignore
+    // No pending reminders, or notifications are unavailable.
   }
 }
 
 export function useDailyTrainingReminder() {
-  const { todayActivity } = usePlan();
+  const { activePlan, isLoading } = usePlan();
+  const db = useDb();
   const { settings } = useSettings();
   const { showToast } = useToast();
 
-  // Request permission proactively when reminder is enabled
   useEffect(() => {
     if (!settings.daily_reminder_enabled) return;
     void requestNotificationPermission().then(({ granted, needsSettings }) => {
-      if (!granted) {
-        if (needsSettings) {
-          console.warn('[Notifications] Permission was previously denied. User must enable in iOS Settings > Run 4 Fun > Notifications');
-          showToast('Notification permission denied. Enable in Settings > Run 4 Fun > Notifications', 'info');
-        } else {
-          console.warn('[Notifications] Permission not granted; reminders will use in-app toasts');
-        }
+      if (!granted && needsSettings) {
+        showToast('Notification permission denied. Enable in Settings > Run 4 Fun > Notifications', 'info');
       }
     });
   }, [settings.daily_reminder_enabled, showToast]);
 
   useEffect(() => {
-    if (!settings.daily_reminder_enabled) return;
+    if (isLoading) return;
+    if (!settings.daily_reminder_enabled || !db || !activePlan) {
+      void clearScheduledReminders();
+      return;
+    }
 
     const time = settings.daily_reminder_time ?? '08:00';
     const [hStr, mStr] = time.split(':');
@@ -157,82 +156,60 @@ export function useDailyTrainingReminder() {
     const targetMinute = parseInt(mStr, 10);
     if (isNaN(targetHour) || isNaN(targetMinute)) return;
 
-    async function fireReminder(message: string, today: string) {
-      saveLastFireDate(today);
+    let cancelled = false;
 
-      // Prefer Tauri native notifications when available (iOS, desktop app)
+    (async () => {
+      const days = await getPlanDays(db, activePlan.plan_id);
+      if (cancelled) return;
+
+      const upcoming = days
+        .filter(day => day.activity_type !== 'rest')
+        .map(day => {
+          const iso = planDayToDate(activePlan.start_date, day.week_number, day.day_of_week);
+          const when = reminderAt(iso, targetHour, targetMinute);
+          const label = ACTIVITY_LABELS[day.activity_type];
+          const details = day.distance_value
+            ? formatDistance(day.distance_value, day.distance_unit)
+            : day.duration_minutes
+              ? `${day.duration_minutes} min`
+              : '';
+          return {
+            when,
+            body: details ? `${label} · ${details}` : label,
+          };
+        })
+        .filter(item => item.when.getTime() > Date.now())
+        .sort((a, b) => a.when.getTime() - b.when.getTime())
+        .slice(0, REMINDER_IDS.length);
+
       try {
         const { isTauri } = await import('@tauri-apps/api/core');
-        if (isTauri()) {
-          const { sendNotification, isPermissionGranted } = await import('@tauri-apps/plugin-notification');
-          const granted = await isPermissionGranted();
-          if (granted) {
-            console.log('[Notifications] Sending Tauri notification:', message);
-            await sendNotification({ title: "Today's training", body: message });
-            return;
-          } else {
-            console.warn('[Notifications] Tauri permission not granted, falling back to toast');
-          }
-        }
-      } catch (error) {
-        console.warn('[Notifications] Tauri notification failed:', error);
-        // fall through to web/Toast
-      }
-
-      // Fallback: web Notification API, then in-app toast
-      if (typeof window !== 'undefined' && 'Notification' in window) {
-        if (Notification.permission === 'granted') {
-          new Notification("Today's training", { body: message });
-        } else if (Notification.permission === 'default') {
-          Notification.requestPermission().then(result => {
-            if (result === 'granted') {
-              new Notification("Today's training", { body: message });
-            } else {
-              showToast(message, 'info');
-            }
-          }).catch(() => {
-            showToast(message, 'info');
+        if (!(await isTauri())) return;
+        const { isPermissionGranted, sendNotification, Schedule, cancel } = await import('@tauri-apps/plugin-notification');
+        if (!(await isPermissionGranted())) return;
+        try { await cancel(REMINDER_IDS); } catch { /* none pending */ }
+        if (cancelled) return;
+        upcoming.forEach((item, index) => {
+          sendNotification({
+            id: REMINDER_IDS[index],
+            title: "Today's run",
+            body: item.body,
+            schedule: Schedule.at(item.when, false, true),
           });
-        } else {
-          showToast(message, 'info');
-        }
-      } else {
-        showToast(message, 'info');
+        });
+      } catch (error) {
+        console.warn('[Notifications] Could not schedule run reminders:', error);
       }
-    }
+    })();
 
-    const interval = window.setInterval(() => {
-      const now = new Date();
-      const currentMinutes = now.getHours() * 60 + now.getMinutes();
-      const targetMinutes = targetHour * 60 + targetMinute;
-
-      const today = todayIso();
-      const lastFire = loadLastFireDate();
-
-      // Fire once per day, within a 5-minute window around the configured time
-      if (lastFire === today) return;
-      if (Math.abs(currentMinutes - targetMinutes) > 5) return;
-
-      const planDay = todayActivity?.plan_day;
-      if (!planDay || (planDay.activity_type !== 'cross_training' && planDay.activity_type === 'rest')) {
-        // No scheduled training today (or rest only), skip
-        return;
-      }
-
-      const label = ACTIVITY_LABELS[planDay.activity_type];
-      let details = '';
-      if (planDay.distance_value) {
-        details = formatDistance(planDay.distance_value, planDay.distance_unit);
-      } else if (planDay.duration_minutes) {
-        details = `${planDay.duration_minutes} min`;
-      }
-
-      const message = details ? `${label} · ${details}` : label;
-      void fireReminder(message, today);
-    }, 60_000); // check every minute
-
-    return () => window.clearInterval(interval);
-  }, [settings.daily_reminder_enabled, settings.daily_reminder_time, todayActivity, showToast]);
+    return () => { cancelled = true; };
+  }, [
+    isLoading,
+    db,
+    activePlan,
+    settings.daily_reminder_enabled,
+    settings.daily_reminder_time,
+  ]);
 }
 
 

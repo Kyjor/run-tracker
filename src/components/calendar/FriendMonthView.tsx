@@ -80,7 +80,7 @@ export function FriendMonthView({ planDays, runs, startDate, onSelectDate, selec
               key={iso}
               date={date}
               planDay={planDayMap[iso] ?? null}
-              run={runMap[iso] ?? null}
+              runs={runMap[iso] ? [runMap[iso]] : []}
               isCurrentMonth={date.getMonth() === currentMonth}
               isToday={isToday(date)}
               isSelected={selectedDate === iso}

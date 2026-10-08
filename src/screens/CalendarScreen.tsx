@@ -2,6 +2,8 @@ import { useState } from 'react';
 import type { PlanDay, Run } from '../types';
 import { Header } from '../components/navigation/Header';
 import { MonthView } from '../components/calendar/MonthView';
+import { WeekView } from '../components/calendar/WeekView';
+import { SegmentedControl } from '../components/ui/SegmentedControl';
 import { DayDetailSheet } from '../components/calendar/DayDetailSheet';
 import { usePlan } from '../contexts/PlanContext';
 import { useDb } from '../contexts/DatabaseContext';
@@ -15,7 +17,8 @@ export function CalendarScreen() {
   const { activePlan, activePlanDetails, refresh } = usePlan();
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [selectedPlanDay, setSelectedPlanDay] = useState<PlanDay | null>(null);
-  const [selectedRun, setSelectedRun] = useState<Run | null>(null);
+  const [selectedRuns, setSelectedRuns] = useState<Run[]>([]);
+  const [view, setView] = useState<'week' | 'month'>('week');
   const [sheetOpen, setSheetOpen] = useState(false);
   const [refreshToken, setRefreshToken] = useState(0);
 
@@ -31,7 +34,7 @@ export function CalendarScreen() {
       setSelectedPlanDay(null);
     }
     const runs = await getRunsForDate(db, iso);
-    setSelectedRun(runs[0] ?? null);
+    setSelectedRuns(runs);
     setSheetOpen(true);
   }
 
@@ -47,14 +50,35 @@ export function CalendarScreen() {
         subtitle={activePlanDetails ? activePlanDetails.name : 'No active plan'}
       />
 
-      <div className="px-2 pt-4">
-        <MonthView
-          activePlan={activePlan}
-          activePlanDetails={activePlanDetails}
-          selectedDate={selectedDate}
-          onSelectDate={handleSelectDate}
-          refreshToken={refreshToken}
+      <div className="px-4 pt-3">
+        <SegmentedControl
+          options={[
+            { value: 'week' as const, label: 'Week' },
+            { value: 'month' as const, label: 'Month' },
+          ]}
+          value={view}
+          onChange={setView}
         />
+      </div>
+
+      <div className="px-2 pt-4">
+        {view === 'week' ? (
+          <WeekView
+            activePlan={activePlan}
+            activePlanDetails={activePlanDetails}
+            selectedDate={selectedDate}
+            onSelectDate={handleSelectDate}
+            refreshToken={refreshToken}
+          />
+        ) : (
+          <MonthView
+            activePlan={activePlan}
+            activePlanDetails={activePlanDetails}
+            selectedDate={selectedDate}
+            onSelectDate={handleSelectDate}
+            refreshToken={refreshToken}
+          />
+        )}
       </div>
 
       <ActivityLegend />
@@ -64,7 +88,7 @@ export function CalendarScreen() {
         onClose={() => setSheetOpen(false)}
         date={selectedDate}
         planDay={selectedPlanDay}
-        run={selectedRun}
+        runs={selectedRuns}
         activePlan={activePlan}
         durationWeeks={activePlanDetails?.duration_weeks ?? 0}
         onPlanDayUpdated={handlePlanDayUpdated}

@@ -261,6 +261,18 @@ export async function getPlanDaysByUser(userId: string, planId: string): Promise
   return (days ?? []) as PlanDay[];
 }
 
+/** True when both people follow each other. Own profile counts as visible. */
+export async function isMutualFollow(targetId: string): Promise<boolean> {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) return false;
+  if (session.user.id === targetId) return true;
+  const [mine, theirs] = await Promise.all([
+    supabase.from('follows').select('follower_id').eq('follower_id', session.user.id).eq('following_id', targetId).maybeSingle(),
+    supabase.from('follows').select('follower_id').eq('follower_id', targetId).eq('following_id', session.user.id).maybeSingle(),
+  ]);
+  return !!mine.data && !!theirs.data;
+}
+
 export async function isFollowing(targetId: string): Promise<boolean> {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) return false;
@@ -291,10 +303,18 @@ export async function getFeed(limit = 30, offset = 0): Promise<FeedItem[]> {
     .filter(id => id !== session.user.id);
   if (followingIds.length === 0) return [];
 
+  const { data: followedBack } = await supabase
+    .from('follows')
+    .select('follower_id')
+    .eq('following_id', session.user.id)
+    .in('follower_id', followingIds);
+  const mutualIds = (followedBack ?? []).map(row => row.follower_id);
+  if (mutualIds.length === 0) return [];
+
   const { data: runs } = await supabase
     .from('user_runs')
     .select('*')
-    .in('user_id', followingIds)
+    .in('user_id', mutualIds)
     .order('date', { ascending: false })
     .order('created_at', { ascending: false })
     .range(offset, offset + limit - 1);
@@ -307,7 +327,7 @@ export async function getFeed(limit = 30, offset = 0): Promise<FeedItem[]> {
   // Batch: profiles, routes, and all existing feed_activities for these runs
   const [profilesRes, routesRes, activitiesRes] = await Promise.all([
     supabase.from('profiles').select('*').in('id', userIds),
-    supabase.from('user_run_routes').select('run_id, points_json').in('run_id', runIds).in('user_id', followingIds),
+    supabase.from('user_run_routes').select('run_id, points_json').in('run_id', runIds).in('user_id', mutualIds),
     supabase.from('feed_activities').select('id, user_id, data').eq('activity_type', 'run_completed').in('user_id', userIds),
   ]);
 

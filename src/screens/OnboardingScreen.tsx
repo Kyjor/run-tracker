@@ -12,11 +12,11 @@ import { format } from 'date-fns';
 
 type Step = 'welcome' | 'units' | 'browse' | 'preview' | 'start_date' | 'done';
 
-const RACE_OPTIONS: { type: RaceType; emoji: string; description: string }[] = [
-  { type: '5k', emoji: '🏅', description: 'A great first goal. You can do this.' },
-  { type: '10k', emoji: '🥈', description: 'Double the challenge, double the reward.' },
-  { type: 'half_marathon', emoji: '🥇', description: '13.1 miles of glory.' },
-  { type: 'full_marathon', emoji: '🏆', description: 'The ultimate distance.' },
+const RACE_OPTIONS: { type: RaceType; description: string }[] = [
+  { type: '5k', description: 'A great first goal.' },
+  { type: '10k', description: 'A step up from the 5K.' },
+  { type: 'half_marathon', description: '13.1 miles.' },
+  { type: 'full_marathon', description: 'The long one.' },
 ];
 
 function groupByWeek(days: PlanDay[]): PlanDay[][] {
@@ -42,6 +42,7 @@ export function OnboardingScreen() {
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
   const [previewDays, setPreviewDays] = useState<PlanDay[]>([]);
   const [startDate, setStartDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const [raceDate, setRaceDate] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
   async function goToBrowse(rt: RaceType) {
@@ -63,8 +64,8 @@ export function OnboardingScreen() {
     setIsLoading(true);
     try {
       await updateSettings({ units, onboarding_complete: true });
-      await setActivePlan(db, selectedPlanId, startDate);
-      showToast('Plan activated! Let\'s run. 🏃', 'success');
+      await setActivePlan(db, selectedPlanId, startDate, raceDate || null);
+      showToast('Plan activated', 'success');
       navigate('/home', { replace: true });
     } catch (e) {
       showToast('Something went wrong. Please try again.', 'error');
@@ -96,7 +97,6 @@ export function OnboardingScreen() {
         {/* WELCOME */}
         {step === 'welcome' && (
           <div className="flex flex-col items-center justify-center flex-1 text-center">
-            <div className="text-7xl mb-6">🏃‍♂️</div>
             <h1 className="text-4xl font-bold text-gray-900 dark:text-white mb-3">
               Run 4 Fun
             </h1>
@@ -106,12 +106,9 @@ export function OnboardingScreen() {
             <Button size="lg" className="w-full" onClick={() => setStep('units')}>
               Get Started
             </Button>
-            <button
-              className="mt-4 text-sm text-gray-400 dark:text-gray-500"
-              onClick={skipPlan}
-            >
-              Skip setup
-            </button>
+            <Button size="lg" variant="secondary" className="w-full mt-3" onClick={skipPlan}>
+              Just log my runs
+            </Button>
           </div>
         )}
 
@@ -134,7 +131,6 @@ export function OnboardingScreen() {
                       : 'border-gray-200 dark:border-gray-700',
                   ].join(' ')}
                 >
-                  <span className="text-2xl">{u === 'mi' ? '🇺🇸' : '🌍'}</span>
                   <div className="text-left">
                     <p className="font-semibold text-gray-900 dark:text-white">{u === 'mi' ? 'Miles' : 'Kilometers'}</p>
                     <p className="text-sm text-gray-500">{u === 'mi' ? 'Used in the US' : 'Used internationally'}</p>
@@ -155,13 +151,12 @@ export function OnboardingScreen() {
             <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Choose Your Goal</h2>
             <p className="text-gray-500 dark:text-gray-400 mb-8">What race are you training for?</p>
             <div className="flex flex-col gap-3">
-              {RACE_OPTIONS.map(({ type, emoji, description }) => (
+              {RACE_OPTIONS.map(({ type, description }) => (
                 <button
                   key={type}
                   onClick={() => goToBrowse(type)}
                   className="flex items-center gap-4 p-4 rounded-2xl border-2 border-gray-200 dark:border-gray-700 active:bg-gray-50 dark:active:bg-gray-800 transition-colors text-left"
                 >
-                  <span className="text-3xl">{emoji}</span>
                   <div>
                     <p className="font-semibold text-gray-900 dark:text-white">
                       {RACE_TYPE_LABELS[type]} <span className="text-gray-400 font-normal text-sm">· {RACE_TYPE_DISTANCES[type]}</span>
@@ -171,9 +166,9 @@ export function OnboardingScreen() {
                 </button>
               ))}
             </div>
-            <button className="mt-6 text-sm text-gray-400 text-center" onClick={skipPlan}>
-              I'll choose a plan later
-            </button>
+            <Button variant="secondary" className="mt-6 w-full" onClick={skipPlan}>
+              Just log my runs
+            </Button>
           </div>
         )}
 
@@ -242,10 +237,17 @@ export function OnboardingScreen() {
               type="date"
               value={startDate}
               onChange={e => setStartDate(e.target.value)}
+              className="w-full rounded-2xl border-2 border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white px-4 py-3 text-lg focus:outline-none focus:border-primary-500"
+            />
+            <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mt-6 mb-2">Race day, if you have one</p>
+            <input
+              type="date"
+              value={raceDate}
+              onChange={e => setRaceDate(e.target.value)}
               className="w-full rounded-2xl border-2 border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white px-4 py-3 text-lg mb-auto focus:outline-none focus:border-primary-500"
             />
             <Button size="lg" className="w-full mt-8" isLoading={isLoading} onClick={finish}>
-              Start Training 🚀
+              Start training
             </Button>
           </div>
         )}

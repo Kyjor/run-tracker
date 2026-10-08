@@ -5,6 +5,7 @@ import { Input, Textarea } from '../ui/Input';
 import { Select } from '../ui/Select';
 import { Button } from '../ui/Button';
 import { GearPicker } from '../gear/GearPicker';
+import { EffortPicker } from './EffortPicker';
 import { today, extractDate } from '../../utils/dateUtils';
 import { formatPace, calcPaceSeconds } from '../../utils/paceUtils';
 import { parseISO, format } from 'date-fns';
@@ -38,6 +39,7 @@ interface RunFormProps {
     run_type: RunType;
     plan_day_id?: string;
     notes: string;
+    effort: number | null;
     avg_heart_rate?: number | null;
     max_heart_rate?: number | null;
     gear_ids: string[];
@@ -102,6 +104,7 @@ export function RunForm({ initialDate, prefillPlanDay, existingRun, onSubmit, is
   });
 
   const [gearIds, setGearIds] = useState<string[]>([]);
+  const [effort, setEffort] = useState<number | null>(existingRun?.effort ?? null);
   const [errors, setErrors] = useState<Partial<Record<keyof RunFormValues, string>>>({});
 
   useEffect(() => {
@@ -156,6 +159,7 @@ export function RunForm({ initialDate, prefillPlanDay, existingRun, onSubmit, is
       run_type: values.run_type as RunType,
       plan_day_id: prefillPlanDay?.id,
       notes: values.notes,
+      effort,
       avg_heart_rate: parseOptionalHr(values.avg_heart_rate),
       max_heart_rate: parseOptionalHr(values.max_heart_rate),
       gear_ids: gearIds,
@@ -291,6 +295,8 @@ export function RunForm({ initialDate, prefillPlanDay, existingRun, onSubmit, is
       </div>
 
       <GearPicker selectedIds={gearIds} onChange={setGearIds} />
+
+      <EffortPicker value={effort} onChange={setEffort} />
 
       <Textarea
         label="Notes (optional)"

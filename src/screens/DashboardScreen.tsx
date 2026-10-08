@@ -20,12 +20,13 @@ import { useAuth } from '../contexts/AuthContext';
 import { getRuns } from '../services/runService';
 import { getActiveGoals, getGoalProgress } from '../services/goalService';
 import { getRunStats } from '../services/statsService';
-import { getFeed, toggleLike } from '../services/socialService';
+import { getFeed, toggleLike, getMyProfile } from '../services/socialService';
 import { getCachedFeed, isFeedStale, setCachedFeed } from '../services/feedCache';
 import { getShoesNeedingAlert } from '../services/gearService';
 import type { Gear } from '../types';
 import { HomeAdBanner } from '../components/ads/HomeAdBanner';
-import { format, startOfWeek, endOfWeek } from 'date-fns';
+import { TodayHealthKitPrompt } from '../components/run/TodayHealthKitPrompt';
+import { differenceInCalendarDays, format, parseISO, startOfWeek, endOfWeek } from 'date-fns';
 import { convertDistance, formatDistance } from '../utils/paceUtils';
 
 const FEED_PAGE_SIZE = 5;
@@ -35,7 +36,8 @@ export function DashboardScreen() {
   const db = useDb();
   const { settings } = useSettings();
   const { user } = useAuth();
-  const { todayActivity, weekNumber, dayOfWeek, isLoading } = usePlan();
+  const { todayActivity, weekNumber, dayOfWeek, weekProgress, activePlan, isLoading } = usePlan();
+  const [displayName, setDisplayName] = useState<string | null>(null);
 
   const [lastRun, setLastRun] = useState<Run | null>(null);
   const [goalProgress, setGoalProgress] = useState<GoalProgress[]>([]);
@@ -88,6 +90,9 @@ export function DashboardScreen() {
   useEffect(() => {
     if (!user) return;
     if (isFeedStale()) refreshFeed();
+    getMyProfile().then(profile => {
+      if (profile?.display_name) setDisplayName(profile.display_name);
+    }).catch(() => {});
   }, [user]);
 
   const loadMoreFeed = useCallback(async () => {
@@ -144,9 +149,13 @@ export function DashboardScreen() {
     }
   }, [db, settings.units, user, refreshFeed]);
 
-  // Compute week run progress
-  const weekProgress = { completed: 0, total: 0 };
-  // This could be derived from plan days vs runs in week; simple count for now
+  const greetingName = displayName
+    ?? (typeof user?.user_metadata?.display_name === 'string' ? user.user_metadata.display_name : null)
+    ?? 'Runner';
+
+  const raceDays = activePlan?.race_date
+    ? differenceInCalendarDays(parseISO(activePlan.race_date), new Date())
+    : null;
 
   if (isLoading || dataLoading) {
     return (
@@ -159,12 +168,20 @@ export function DashboardScreen() {
   return (
     <div className="flex flex-col flex-1 overflow-hidden">
       <Header
-        title={`Good ${getGreeting()}, ${user?.user_metadata?.display_name ?? user?.email?.split('@')[0] ?? 'Runner'}`}
+        title={`Good ${getGreeting()}, ${greetingName}`}
         subtitle={format(new Date(), 'EEEE, MMMM d')}
       />
 
       <PullToRefresh onRefresh={handleRefresh}>
         <div className="px-4 pt-4 pb-36 flex flex-col gap-section">
+
+        <TodayHealthKitPrompt />
+
+        {raceDays != null && raceDays >= 0 && (
+          <p className="text-sm font-medium text-primary-700 dark:text-primary-300 px-1">
+            {raceDays === 0 ? 'Race day' : `Race in ${raceDays} day${raceDays === 1 ? '' : 's'}`}
+          </p>
+        )}
 
         {shoeAlerts.length > 0 && (
           <Card className="border border-amber-200/80 dark:border-amber-800 bg-amber-50/80 dark:bg-amber-900/20">
@@ -192,15 +209,25 @@ export function DashboardScreen() {
             ) : undefined
           } />
 
-          {weekStats && weekStats.total_runs > 0 && (
+          {weekStats && (
             <div className="flex items-center gap-3 mb-3 px-1">
               <WeekStat label="Runs" value={String(weekStats.total_runs)} />
               <span className="text-gray-300 dark:text-gray-600">·</span>
               <WeekStat label={settings.units} value={weekStats.total_distance.toFixed(1)} />
               <span className="text-gray-300 dark:text-gray-600">·</span>
               <WeekStat label="streak" value={`${weekStats.current_streak}d`} />
-              <span className="ml-auto text-[10px] text-ink-muted dark:text-ink-dark-muted uppercase tracking-wide">this week</span>
+              {weekProgress.total > 0 && (
+                <>
+                  <span className="text-gray-300 dark:text-gray-600">·</span>
+                  <WeekStat label="planned" value={`${weekProgress.completed}/${weekProgress.total}`} />
+                </>
+              )}
             </div>
+          )}
+          {weekProgress.missed > 0 && (
+            <p className="text-xs text-amber-700 dark:text-amber-400 mb-2 px-1">
+              {weekProgress.missed} planned day{weekProgress.missed === 1 ? '' : 's'} missed this week
+            </p>
           )}
 
           {todayActivity ? (
@@ -212,10 +239,12 @@ export function DashboardScreen() {
             />
           ) : (
             <Card className="text-center py-6">
-              <p className="text-gray-500 dark:text-gray-400 text-sm mb-3">No active plan</p>
-              <Button size="sm" onClick={() => navigate('/profile/plans')}>
-                Browse Plans
-              </Button>
+              <p className="font-semibold text-ink-primary dark:text-ink-dark-primary mb-1">No plan today</p>
+              <p className="text-gray-500 dark:text-gray-400 text-sm mb-4">Start a run, or pick a plan when you want one.</p>
+              <div className="flex flex-col gap-2">
+                <Button onClick={() => navigate('/log/live')}>Start a run</Button>
+                <Button size="sm" variant="secondary" onClick={() => navigate('/profile/plans')}>Browse plans</Button>
+              </div>
             </Card>
           )}
         </div>
@@ -243,18 +272,20 @@ export function DashboardScreen() {
         </div>
 
         {/* Goal progress */}
-        {goalProgress.length > 0 && (
-          <div>
+        <div>
             <SectionHeader title="Goals" action={
-              <button type="button" className="text-xs font-medium text-primary-600 dark:text-primary-400" onClick={() => navigate('/profile/goals')}>
-                Manage
-              </button>
+              goalProgress.length > 0 ? (
+                <button type="button" className="text-xs font-medium text-primary-600 dark:text-primary-400" onClick={() => navigate('/profile/goals')}>
+                  Manage
+                </button>
+              ) : undefined
             } />
+            {goalProgress.length > 0 ? (
             <div className="flex flex-col gap-2">
               {goalProgress.map(gp => (
                 <Card key={gp.goal.id} padding={false}>
                   <div className="flex items-center gap-4 p-4">
-                    <ProgressRing value={gp.percentage} size={56} strokeWidth={5} color="#6366f1">
+                    <ProgressRing value={gp.percentage} size={56} strokeWidth={5} color="#ea580c">
                       <span className="text-[10px] font-bold text-gray-700 dark:text-gray-200">
                         {Math.round(gp.percentage)}%
                       </span>
@@ -276,8 +307,13 @@ export function DashboardScreen() {
                 </Card>
               ))}
             </div>
-          </div>
-        )}
+          ) : (
+            <Card className="flex items-center justify-between gap-3">
+              <p className="text-sm text-ink-secondary dark:text-ink-dark-secondary">Set a weekly distance goal</p>
+              <Button size="sm" onClick={() => navigate('/profile/goals')}>Add</Button>
+            </Card>
+          )}
+        </div>
 
         {/* Friends feed */}
         {user && (

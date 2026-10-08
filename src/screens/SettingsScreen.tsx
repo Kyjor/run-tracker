@@ -38,7 +38,7 @@ export function SettingsScreen() {
   const navigate = useNavigate();
   const db = useDb();
   const { settings, updateSettings } = useSettings();
-  const { user, signOut } = useAuth();
+  const { user, signOut, updatePassword, deleteAccount } = useAuth();
   const { showToast } = useToast();
 
   const [removeAdsPrice, setRemoveAdsPrice] = useState('$2.99');
@@ -49,6 +49,13 @@ export function SettingsScreen() {
   const [clearModal, setClearModal] = useState(false);
   const [clearConfirmText, setClearConfirmText] = useState('');
   const [isClearing, setIsClearing] = useState(false);
+  const [passwordModal, setPasswordModal] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [passwordBusy, setPasswordBusy] = useState(false);
+  const [deleteModal, setDeleteModal] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
+  const [deleting, setDeleting] = useState(false);
   const [notificationStatus, setNotificationStatus] = useState<'granted' | 'denied' | 'default' | 'unknown' | null>(null);
 
   async function ensureNotificationPermission() {
@@ -200,6 +207,62 @@ export function SettingsScreen() {
     }
   }
 
+  async function handleChangePassword() {
+    if (newPassword !== confirmPassword) {
+      showToast('Passwords do not match', 'error');
+      return;
+    }
+    setPasswordBusy(true);
+    try {
+      await updatePassword(newPassword);
+      setPasswordModal(false);
+      setNewPassword('');
+      setConfirmPassword('');
+      showToast('Password updated', 'success');
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Could not update password', 'error');
+    } finally {
+      setPasswordBusy(false);
+    }
+  }
+
+  async function handleDeleteAccount() {
+    if (deleteConfirmText !== 'delete my account') {
+      showToast('Please type the confirmation phrase exactly', 'error');
+      return;
+    }
+    setDeleting(true);
+    try {
+      await deleteAccount();
+      const cleanup = [
+        'DELETE FROM run_gear',
+        'DELETE FROM gear_defaults',
+        'DELETE FROM gear',
+        'DELETE FROM run_routes',
+        'DELETE FROM fit_imports',
+        'DELETE FROM sync_queue',
+        'DELETE FROM runs',
+        'DELETE FROM goals',
+        'DELETE FROM plan_days WHERE plan_id IN (SELECT id FROM training_plans WHERE is_builtin = 0)',
+        'DELETE FROM training_plans WHERE is_builtin = 0',
+        'UPDATE active_plan SET is_active = 0',
+      ];
+      for (const sql of cleanup) {
+        try { await db.execute(sql); } catch (cleanupError) {
+          console.warn('Local cleanup skipped:', cleanupError);
+        }
+      }
+      setDeleteModal(false);
+      setDeleteConfirmText('');
+      showToast('Account deleted', 'info');
+      navigate('/auth', { replace: true });
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Could not delete account', 'error');
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   return (
     <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
       <Header title="Settings" showBack />
@@ -230,7 +293,7 @@ export function SettingsScreen() {
               <div>
                 <p className="text-sm font-medium text-gray-800 dark:text-gray-100">Daily training reminder</p>
                 <p className="text-xs text-gray-500 dark:text-gray-400">
-                  Remind me each day what&apos;s on my plan (runs or cross training).
+                  On run days, at this time, even if the app is closed. Rest days stay quiet.
                 </p>
               </div>
               <label className="inline-flex items-center cursor-pointer">
@@ -306,6 +369,8 @@ export function SettingsScreen() {
                   <p className="text-xs text-gray-400">Last sync: {new Date(settings.last_sync_at).toLocaleString()}</p>
                 )}
                 <Button variant="ghost" onClick={signOut}>Sign Out</Button>
+                <Button variant="secondary" onClick={() => setPasswordModal(true)}>Change password</Button>
+                <Button variant="danger" onClick={() => setDeleteModal(true)}>Delete account</Button>
               </>
             ) : (
               <>
@@ -502,6 +567,76 @@ export function SettingsScreen() {
         </div>
         </div>
       </div>
+
+      <Modal
+        isOpen={passwordModal}
+        onClose={() => {
+          setPasswordModal(false);
+          setNewPassword('');
+          setConfirmPassword('');
+        }}
+        title="Change password"
+      >
+        <div className="flex flex-col gap-4">
+          <Input
+            label="New password"
+            type="password"
+            value={newPassword}
+            onChange={e => setNewPassword(e.target.value)}
+            minLength={6}
+            autoComplete="new-password"
+          />
+          <Input
+            label="Confirm password"
+            type="password"
+            value={confirmPassword}
+            onChange={e => setConfirmPassword(e.target.value)}
+            minLength={6}
+            autoComplete="new-password"
+          />
+          <Button
+            onClick={handleChangePassword}
+            isLoading={passwordBusy}
+            disabled={newPassword.length < 6}
+            className="w-full"
+          >
+            Save password
+          </Button>
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={deleteModal}
+        onClose={() => {
+          setDeleteModal(false);
+          setDeleteConfirmText('');
+        }}
+        title="Delete account"
+      >
+        <div className="flex flex-col gap-4">
+          <p className="text-sm text-gray-700 dark:text-gray-300">
+            This permanently deletes your account, cloud runs, and the runs stored on this phone. It cannot be undone.
+          </p>
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            To confirm, type: <strong className="font-mono">delete my account</strong>
+          </p>
+          <Input
+            value={deleteConfirmText}
+            onChange={e => setDeleteConfirmText(e.target.value)}
+            placeholder="delete my account"
+            className="font-mono text-sm"
+          />
+          <Button
+            variant="danger"
+            onClick={handleDeleteAccount}
+            isLoading={deleting}
+            disabled={deleteConfirmText !== 'delete my account'}
+            className="w-full"
+          >
+            Delete account
+          </Button>
+        </div>
+      </Modal>
 
       <Modal
         isOpen={clearModal}

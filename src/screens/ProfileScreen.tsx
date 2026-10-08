@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Header } from '../components/navigation/Header';
+import { Avatar } from '../components/ui/Avatar';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
@@ -84,16 +85,16 @@ export function ProfileScreen() {
   }
 
   const menuItems = [
+    { label: 'Log or import', path: '/log' },
     { label: 'Personal Bests', path: '/profile/personal-bests' },
     { label: 'My Plans', path: '/profile/plans' },
     { label: 'Goals', path: '/profile/goals' },
     { label: 'Gear', path: '/profile/gear' },
     { label: 'Achievements', path: '/profile/achievements' },
-    { label: 'Public Profile', path: user ? `/social/profile/${user.id}` : '/auth' },
-    { label: 'Friends', path: '/social' },
-    { label: 'Community Plans', path: '/community' },
     { label: 'Settings', path: '/settings' },
   ];
+
+  const profileName = profile?.display_name ?? user?.user_metadata?.display_name ?? 'Runner';
 
   return (
     <div className="flex flex-col flex-1 overflow-y-auto pb-24">
@@ -108,17 +109,15 @@ export function ProfileScreen() {
           }}
         >
           <div className="flex items-center gap-4 mb-4">
-            <div className="w-14 h-14 bg-primary-100 dark:bg-primary-900/40 rounded-full flex items-center justify-center text-2xl">
-              {user ? user.email?.[0].toUpperCase() : '🏃'}
-            </div>
+            <Avatar name={profileName} size="lg" />
             <div className="flex-1">
               <p className="font-bold text-gray-900 dark:text-white text-lg">
-                {profile?.display_name ?? user?.user_metadata?.display_name ?? 'Runner'}
+                {profileName}
               </p>
               {user && <p className="text-sm text-gray-400">{user.email}</p>}
               {profile && (
                 <p className="text-xs text-gray-400 mt-0.5">
-                  {profile.is_public ? '🌐 Public profile' : '🔒 Private profile'}
+                  {profile.is_public ? 'Public profile' : 'Private profile'}
                 </p>
               )}
               {user && (
@@ -162,7 +161,6 @@ export function ProfileScreen() {
               onClick={() => navigate(`/profile/plans/${activePlan?.plan_id}`)}
               className="flex items-center gap-3 p-4 w-full"
             >
-              <span className="text-2xl">📋</span>
               <div className="flex-1 text-left">
                 <p className="text-sm font-semibold text-gray-900 dark:text-white">{activePlanDetails.name}</p>
                 <p className="text-xs text-gray-400">
@@ -173,6 +171,17 @@ export function ProfileScreen() {
             </button>
           </Card>
         )}
+
+        <div className="grid grid-cols-2 gap-3">
+          <Card onClick={() => navigate(user ? '/social' : '/auth')}>
+            <p className="text-sm font-semibold text-ink-primary dark:text-ink-dark-primary">Friends</p>
+            <p className="text-xs text-ink-muted mt-0.5">{user ? `${followingCount} following` : 'Sign in'}</p>
+          </Card>
+          <Card onClick={() => navigate(user ? '/community' : '/auth')}>
+            <p className="text-sm font-semibold text-ink-primary dark:text-ink-dark-primary">Community</p>
+            <p className="text-xs text-ink-muted mt-0.5">Shared plans</p>
+          </Card>
+        </div>
 
         {/* Menu */}
         <Card padding={false}>
@@ -216,8 +225,8 @@ export function ProfileScreen() {
           />
           <div className="flex items-center justify-between py-1">
             <div>
-              <p className="text-sm font-medium text-gray-800 dark:text-gray-100">Public Profile</p>
-              <p className="text-xs text-gray-400 mt-0.5">Others can find you in Friend Search</p>
+              <p className="text-sm font-medium text-gray-800 dark:text-gray-100">Public profile</p>
+              <p className="text-xs text-gray-400 mt-0.5">Lets people find you in search. Runs stay visible only to people you follow who follow you back.</p>
             </div>
             <Toggle checked={editPublic} onChange={setEditPublic} />
           </div>

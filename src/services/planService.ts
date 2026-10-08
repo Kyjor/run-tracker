@@ -1,6 +1,9 @@
 import type Database from '@tauri-apps/plugin-sql';
-import type { TrainingPlan, PlanDay, ActivePlan, RaceType, Difficulty, PlanExportFormat } from '../types';
+import type { TrainingPlan, PlanDay, ActivePlan, RaceType, Difficulty, PlanExportFormat, DistanceUnit, Run } from '../types';
 import { generateId } from '../utils/generateId';
+import { currentPlanPosition, extractDate, planDayToDate, today } from '../utils/dateUtils';
+import { getRunsByDateRange } from './runService';
+import { convertDistance } from '../utils/paceUtils';
 
 // ---------------------------------------------------------------------------
 // Training Plans
@@ -214,7 +217,12 @@ export async function getActivePlan(db: Database): Promise<ActivePlan | null> {
   return rows[0] ?? null;
 }
 
-export async function setActivePlan(db: Database, planId: string, startDate: string): Promise<void> {
+export async function setActivePlan(
+  db: Database,
+  planId: string,
+  startDate: string,
+  raceDate?: string | null,
+): Promise<void> {
   const now = new Date().toISOString();
   // Deactivate any existing active plan and mark as dirty so it syncs
   await db.execute("UPDATE active_plan SET is_active = 0, sync_status='dirty' WHERE is_active = 1");
@@ -237,6 +245,13 @@ export async function setActivePlan(db: Database, planId: string, startDate: str
     );
   }
 
+  if (raceDate !== undefined) {
+    await db.execute(
+      "UPDATE active_plan SET race_date=$1, sync_status='dirty' WHERE plan_id=$2 AND is_active=1",
+      [raceDate, planId],
+    );
+  }
+
   // Publish feed activity and sync to cloud
   const plan = await getPlanById(db, planId);
   if (plan) {
@@ -253,6 +268,71 @@ export async function setActivePlan(db: Database, planId: string, startDate: str
       console.error('Failed to sync active plan after activation:', e);
     });
   }
+}
+
+export async function setRaceDate(db: Database, raceDate: string | null): Promise<void> {
+  await db.execute(
+    "UPDATE active_plan SET race_date=$1, sync_status='dirty' WHERE is_active = 1",
+    [raceDate],
+  );
+  const { syncToCloud } = await import('./syncService');
+  syncToCloud(db).catch((e) => {
+    console.error('Failed to sync race date:', e);
+  });
+}
+
+const SCHEDULED_RUNS = new Set([
+  'easy_run', 'pace_run', 'tempo_run', 'long_run', 'intervals', 'race',
+]);
+
+function dayIsComplete(day: PlanDay, dayRuns: Run[]): boolean {
+  if (dayRuns.length === 0) return false;
+  if (day.activity_type === 'cross_training') return true;
+  if (
+    SCHEDULED_RUNS.has(day.activity_type) &&
+    day.distance_value != null &&
+    day.distance_value > 0
+  ) {
+    const target = (day.distance_unit || 'mi') as DistanceUnit;
+    const total = dayRuns.reduce(
+      (sum, run) => sum + convertDistance(run.distance_value, run.distance_unit, target),
+      0,
+    );
+    return total + 1e-6 >= day.distance_value;
+  }
+  return true;
+}
+
+/** Planned sessions this week versus what is already logged. */
+export async function getWeekAdherence(
+  db: Database,
+  active: ActivePlan,
+  durationWeeks: number,
+): Promise<{ completed: number; total: number; missed: number }> {
+  const empty = { completed: 0, total: 0, missed: 0 };
+  const pos = currentPlanPosition(active.start_date, durationWeeks);
+  if (!pos) return empty;
+
+  const days = await getPlanDays(db, active.plan_id);
+  const weekDays = days.filter(
+    d => d.week_number === pos.weekNumber && d.activity_type !== 'rest',
+  );
+  if (weekDays.length === 0) return empty;
+
+  const dates = weekDays.map(d => planDayToDate(active.start_date, d.week_number, d.day_of_week));
+  const sorted = [...dates].sort();
+  const runs = await getRunsByDateRange(db, sorted[0], sorted[sorted.length - 1]);
+  const todayIso = today();
+
+  let completed = 0;
+  let missed = 0;
+  for (const day of weekDays) {
+    const iso = planDayToDate(active.start_date, day.week_number, day.day_of_week);
+    const dayRuns = runs.filter(run => extractDate(run.date) === iso);
+    if (dayIsComplete(day, dayRuns)) completed += 1;
+    else if (iso < todayIso) missed += 1;
+  }
+  return { completed, total: weekDays.length, missed };
 }
 
 export async function clearActivePlan(db: Database): Promise<void> {

@@ -1,5 +1,6 @@
 import Foundation
 import CoreLocation
+import UIKit
 
 // ---------------------------------------------------------------------------
 // Session model (matches TypeScript LiveRunSnapshot)
@@ -25,6 +26,8 @@ struct LiveRunSnapshotJSON: Codable {
     var avg_heart_rate: Double?
     var max_heart_rate: Double?
     var min_heart_rate: Double?
+    var paused_total_ms: Double?
+    var pause_started_ms: Double?
 }
 
 typealias LiveRunUpdateCallback = @convention(c) (UnsafeMutablePointer<CChar>?) -> Void
@@ -41,7 +44,9 @@ private func idleSnapshot() -> LiveRunSnapshotJSON {
         current_heart_rate: nil,
         avg_heart_rate: nil,
         max_heart_rate: nil,
-        min_heart_rate: nil
+        min_heart_rate: nil,
+        paused_total_ms: 0,
+        pause_started_ms: nil
     )
 }
 
@@ -68,6 +73,11 @@ final class LocationTrackingManager: NSObject, CLLocationManagerDelegate {
     private let maxAccuracyMeters: Double = 50
     private var hrSampleSum: Double = 0
     private var hrSampleCount: Int = 0
+    private var slowSinceMs: Double?
+    private var autoPaused = false
+    private let autoPauseSpeedMps: Double = 0.45
+    private let autoResumeSpeedMps: Double = 1.2
+    private let autoPauseAfterMs: Double = 8000
 
     private override init() {
         super.init()
@@ -139,6 +149,8 @@ final class LocationTrackingManager: NSObject, CLLocationManagerDelegate {
         session.started_at_ms = Date().timeIntervalSince1970 * 1000
         hrSampleSum = 0
         hrSampleCount = 0
+        slowSinceMs = nil
+        autoPaused = false
         if permissionStatus() == "when_in_use" {
             session.permission_warning = "Background tracking may stop when the phone is locked. Enable Always location in Settings for reliable tracking."
         }
@@ -160,15 +172,67 @@ final class LocationTrackingManager: NSObject, CLLocationManagerDelegate {
         return 0
     }
 
-    /// Called by HealthKit / BLE bridges with a new BPM sample.
-    func updateHeartRate(_ bpm: Double) {
-        guard bpm > 0 && bpm < 250 else { return }
+    func pauseLiveRun(automatic: Bool) {
         sessionLock.lock()
         guard session.state == "running" else {
             sessionLock.unlock()
             return
         }
+        let now = Date().timeIntervalSince1970 * 1000
+        session.pause_started_ms = now
+        session.state = "paused"
+        refreshElapsed()
+        sessionLock.unlock()
+        autoPaused = automatic
+        slowSinceMs = nil
+        if !automatic {
+            DispatchQueue.main.async {
+                self.manager.stopUpdatingLocation()
+            }
+        }
+        persistSession()
+        notifyUpdate()
+    }
+
+    func resumeLiveRun() {
+        sessionLock.lock()
+        guard session.state == "paused" else {
+            sessionLock.unlock()
+            return
+        }
+        let now = Date().timeIntervalSince1970 * 1000
+        if let pauseStart = session.pause_started_ms {
+            session.paused_total_ms = (session.paused_total_ms ?? 0) + (now - pauseStart)
+        }
+        session.pause_started_ms = nil
+        session.state = "running"
+        refreshElapsed()
+        sessionLock.unlock()
+        autoPaused = false
+        slowSinceMs = nil
+        DispatchQueue.main.async {
+            self.configureBackgroundUpdates()
+            self.manager.startUpdatingLocation()
+        }
+        persistSession()
+        notifyUpdate()
+    }
+
+    /// Called by HealthKit / BLE bridges with a new BPM sample.
+    func updateHeartRate(_ bpm: Double) {
+        guard bpm > 0 && bpm < 250 else { return }
+        sessionLock.lock()
+        guard session.state == "running" || session.state == "paused" else {
+            sessionLock.unlock()
+            return
+        }
         session.current_heart_rate = bpm
+        guard session.state == "running" else {
+            sessionLock.unlock()
+            persistSession()
+            notifyUpdate()
+            return
+        }
         hrSampleSum += bpm
         hrSampleCount += 1
         session.avg_heart_rate = hrSampleSum / Double(hrSampleCount)
@@ -199,6 +263,8 @@ final class LocationTrackingManager: NSObject, CLLocationManagerDelegate {
         hrSampleSum = 0
         hrSampleCount = 0
         sessionLock.unlock()
+        autoPaused = false
+        slowSinceMs = nil
         deleteSessionFile()
         notifyUpdate()
         return snapshot
@@ -213,6 +279,8 @@ final class LocationTrackingManager: NSObject, CLLocationManagerDelegate {
         hrSampleSum = 0
         hrSampleCount = 0
         sessionLock.unlock()
+        autoPaused = false
+        slowSinceMs = nil
         deleteSessionFile()
         notifyUpdate()
     }
@@ -229,10 +297,37 @@ final class LocationTrackingManager: NSObject, CLLocationManagerDelegate {
 
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         guard let location = locations.last else { return }
-        guard session.state == "running" else { return }
+
+        sessionLock.lock()
+        let state = session.state
+        let isAuto = autoPaused
+        sessionLock.unlock()
+
+        if state == "paused" && !isAuto { return }
 
         if location.horizontalAccuracy < 0 || location.horizontalAccuracy > maxAccuracyMeters {
             return
+        }
+
+        if state == "paused" && isAuto {
+            if location.speed >= autoResumeSpeedMps {
+                resumeLiveRun()
+            }
+            return
+        }
+
+        guard state == "running" else { return }
+
+        if location.speed >= 0 && location.speed < autoPauseSpeedMps {
+            let now = Date().timeIntervalSince1970 * 1000
+            if slowSinceMs == nil {
+                slowSinceMs = now
+            } else if now - (slowSinceMs ?? now) >= autoPauseAfterMs {
+                pauseLiveRun(automatic: true)
+                return
+            }
+        } else if location.speed >= autoPauseSpeedMps {
+            slowSinceMs = nil
         }
 
         let point = LiveRoutePoint(
@@ -283,12 +378,15 @@ final class LocationTrackingManager: NSObject, CLLocationManagerDelegate {
     }
 
     private func refreshElapsed() {
-        guard session.state == "running", session.started_at_ms > 0 else {
+        guard session.started_at_ms > 0, session.state == "running" || session.state == "paused" else {
             session.elapsed_seconds = 0
             return
         }
-        let nowMs = Date().timeIntervalSince1970 * 1000
-        session.elapsed_seconds = max(0, (nowMs - session.started_at_ms) / 1000)
+        let pausedTotal = session.paused_total_ms ?? 0
+        let endMs = session.state == "paused"
+            ? (session.pause_started_ms ?? Date().timeIntervalSince1970 * 1000)
+            : Date().timeIntervalSince1970 * 1000
+        session.elapsed_seconds = max(0, (endMs - session.started_at_ms - pausedTotal) / 1000)
     }
 
     private func sessionFileURL() -> URL? {
@@ -377,6 +475,26 @@ public func requestLocationPermission(
 @_cdecl("start_live_run")
 public func startLiveRunNative() -> Int32 {
     LocationTrackingManager.shared.startLiveRun()
+}
+
+@_cdecl("pause_live_run")
+public func pauseLiveRunNative() -> Int32 {
+    LocationTrackingManager.shared.pauseLiveRun(automatic: false)
+    return 0
+}
+
+@_cdecl("resume_live_run")
+public func resumeLiveRunNative() -> Int32 {
+    LocationTrackingManager.shared.resumeLiveRun()
+    return 0
+}
+
+@_cdecl("play_run_haptic")
+public func playRunHapticNative() -> Int32 {
+    DispatchQueue.main.async {
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+    }
+    return 0
 }
 
 @_cdecl("stop_live_run")

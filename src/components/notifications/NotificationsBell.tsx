@@ -17,13 +17,18 @@ interface Notification {
   };
 }
 
-const STORAGE_KEY_NOTIFICATIONS = 'notifications_v1';
-const STORAGE_KEY_LAST_FOLLOWERS = 'notifications_last_followers_v1';
+function notificationsKey(userId: string) {
+  return `notifications_v2_${userId}`;
+}
 
-function loadNotifications(): Notification[] {
+function baselineKey(userId: string) {
+  return `notifications_followers_baseline_v2_${userId}`;
+}
+
+function loadNotifications(key: string): Notification[] {
   if (typeof window === 'undefined') return [];
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY_NOTIFICATIONS);
+    const raw = window.localStorage.getItem(key);
     if (!raw) return [];
     const parsed = JSON.parse(raw) as Notification[];
     return Array.isArray(parsed) ? parsed : [];
@@ -32,19 +37,19 @@ function loadNotifications(): Notification[] {
   }
 }
 
-function saveNotifications(notifs: Notification[]) {
+function saveNotifications(key: string, notifs: Notification[]) {
   if (typeof window === 'undefined') return;
   try {
-    window.localStorage.setItem(STORAGE_KEY_NOTIFICATIONS, JSON.stringify(notifs));
+    window.localStorage.setItem(key, JSON.stringify(notifs));
   } catch {
     // ignore
   }
 }
 
-function loadLastFollowerIds(): string[] {
+function loadLastFollowerIds(key: string): string[] {
   if (typeof window === 'undefined') return [];
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY_LAST_FOLLOWERS);
+    const raw = window.localStorage.getItem(key);
     if (!raw) return [];
     const parsed = JSON.parse(raw) as string[];
     return Array.isArray(parsed) ? parsed : [];
@@ -53,10 +58,10 @@ function loadLastFollowerIds(): string[] {
   }
 }
 
-function saveLastFollowerIds(ids: string[]) {
+function saveLastFollowerIds(key: string, ids: string[]) {
   if (typeof window === 'undefined') return;
   try {
-    window.localStorage.setItem(STORAGE_KEY_LAST_FOLLOWERS, JSON.stringify(ids));
+    window.localStorage.setItem(key, JSON.stringify(ids));
   } catch {
     // ignore
   }
@@ -70,24 +75,40 @@ export function NotificationsBell() {
 
   useEffect(() => {
     if (!user) return;
-    setNotifications(loadNotifications());
+    let cancelled = false;
+    const storedKey = notificationsKey(user.id);
+    const seenKey = baselineKey(user.id);
+    setNotifications(loadNotifications(storedKey));
 
-    // Detect new followers and create notifications (local-only)
     (async () => {
       setLoading(true);
       try {
         const followers: Profile[] = await getFollowersWithProfiles();
+        if (cancelled) return;
         const currentIds = followers.map(f => f.id);
-        const lastIds = loadLastFollowerIds();
+        const hasBaseline = window.localStorage.getItem(seenKey) != null;
 
-        const newIds = currentIds.filter(id => !lastIds.includes(id));
+        // First time we see this account, record who already follows them.
+        // Otherwise everyone they already know shows up as a new follower.
+        if (!hasBaseline) {
+          saveLastFollowerIds(seenKey, currentIds);
+          return;
+        }
+
+        const lastIds = loadLastFollowerIds(seenKey);
+        const existing = loadNotifications(storedKey);
+        const known = new Set([
+          ...lastIds,
+          ...existing.map(n => n.payload.userId),
+        ]);
+        const newIds = currentIds.filter(id => !known.has(id));
         if (newIds.length > 0) {
           const now = new Date().toISOString();
           const newNotifs: Notification[] = newIds.map(id => {
             const profile = followers.find(f => f.id === id);
             return {
               id: `${id}-${now}`,
-              type: 'new_follower',
+              type: 'new_follower' as const,
               created_at: now,
               read: false,
               payload: {
@@ -98,19 +119,20 @@ export function NotificationsBell() {
           });
           setNotifications(prev => {
             const next = [...newNotifs, ...prev];
-            saveNotifications(next);
+            saveNotifications(storedKey, next);
             return next;
           });
         }
 
-        // Persist current follower set for next comparison
-        saveLastFollowerIds(currentIds);
+        saveLastFollowerIds(seenKey, currentIds);
       } catch {
         // ignore errors; notifications are non-critical
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     })();
+
+    return () => { cancelled = true; };
   }, [user]);
 
   const unreadCount = useMemo(
@@ -119,6 +141,7 @@ export function NotificationsBell() {
   );
 
   if (!user) return null;
+  const userId = user.id;
 
   function toggleOpen() {
     const nextOpen = !open;
@@ -126,7 +149,7 @@ export function NotificationsBell() {
     if (nextOpen && unreadCount > 0) {
       const updated = notifications.map(n => ({ ...n, read: true }));
       setNotifications(updated);
-      saveNotifications(updated);
+      saveNotifications(notificationsKey(userId), updated);
     }
   }
 
@@ -191,7 +214,7 @@ export function NotificationsBell() {
                     onClick={() => {
                       const next = notifications.filter(x => x.id !== n.id);
                       setNotifications(next);
-                      saveNotifications(next);
+                      saveNotifications(notificationsKey(userId), next);
                     }}
                     className="ml-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 px-1"
                     aria-label="Dismiss notification"

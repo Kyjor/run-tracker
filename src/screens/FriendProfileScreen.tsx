@@ -21,6 +21,7 @@ import {
   getFollowerCountsForUser,
   getFollowersForUser,
   getFollowingForUser,
+  isMutualFollow,
 } from '../services/socialService';
 import { useSettings } from '../contexts/SettingsContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -48,6 +49,7 @@ export function FriendProfileScreen() {
   const [loading, setLoading] = useState(true);
   const [runsLoading, setRunsLoading] = useState(true);
   const [runsError, setRunsError] = useState(false);
+  const [mutual, setMutual] = useState(true);
   const [planLoading, setPlanLoading] = useState(false);
   const [statsRange, setStatsRange] = useState<'week' | 'month' | 'year' | 'all'>('all');
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
@@ -87,12 +89,13 @@ export function FriendProfileScreen() {
       ]);
       setRuns(recent);
       setAllRuns(all);
+      setMutual(!id || user?.id === id || await isMutualFollow(id));
     } catch {
       setRunsError(true);
     } finally {
       setRunsLoading(false);
     }
-  }, [id]);
+  }, [id, user?.id]);
 
   const loadPlan = useCallback(async () => {
     if (!id) return;
@@ -484,8 +487,10 @@ export function FriendProfileScreen() {
               Could not load runs. You may need to follow this user first, or they haven't synced yet.
             </p>
           </Card>
+        ) : !isOwnProfile && !mutual ? (
+          <EmptyState title="Runs are private" description="You can see each other's runs once you both follow each other." />
         ) : runs.length === 0 ? (
-          <EmptyState emoji="🏃" title="No runs yet" description="This runner hasn't logged any runs." />
+          <EmptyState title="No runs yet" description="This runner hasn't logged any runs." />
         ) : (
           runs.map(run => (
             <Card key={run.id} padding={false}>

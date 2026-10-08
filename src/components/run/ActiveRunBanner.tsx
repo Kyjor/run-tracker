@@ -44,7 +44,8 @@ export function ActiveRunBanner() {
     };
   }, []);
 
-  const visible = !location.pathname.startsWith('/log/live') && snapshot?.state === 'running';
+  const visible = !location.pathname.startsWith('/log/live')
+    && (snapshot?.state === 'running' || snapshot?.state === 'paused');
 
   const distanceValue = !snapshot || snapshot.distance_meters <= 0
     ? 0
@@ -70,7 +71,9 @@ export function ActiveRunBanner() {
               <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-white" />
             </span>
             <div>
-              <p className="text-xs font-medium uppercase tracking-wide text-white/80">Run in progress</p>
+              <p className="text-xs font-medium uppercase tracking-wide text-white/80">
+                {snapshot.state === 'paused' ? 'Run paused' : 'Run in progress'}
+              </p>
               <p className="text-sm font-semibold tabular-nums">
                 {formatDuration(Math.floor(snapshot.elapsed_seconds))}
                 {' · '}

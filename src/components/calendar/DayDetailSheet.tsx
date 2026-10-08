@@ -35,7 +35,7 @@ interface DayDetailSheetProps {
   onClose: () => void;
   date: string | null;
   planDay: PlanDay | null;
-  run: Run | null;
+  runs: Run[];
   activePlan: ActivePlan | null;
   durationWeeks: number;
   onPlanDayUpdated: () => void;
@@ -50,7 +50,7 @@ export function DayDetailSheet({
   onClose,
   date,
   planDay,
-  run,
+  runs,
   activePlan,
   durationWeeks,
   onPlanDayUpdated,
@@ -318,23 +318,24 @@ export function DayDetailSheet({
             <p className="text-sm text-gray-400 mb-4">No scheduled activity for this day.</p>
           )}
 
-          {run ? (
-            <div className="mb-4 p-3 bg-green-50 dark:bg-green-900/20 rounded-2xl">
-              <div className="flex items-center justify-between mb-1">
-                <p className="text-sm font-semibold text-green-700 dark:text-green-400">✓ Run Logged</p>
+          {runs.length > 0 ? (
+            <div className="mb-4 flex flex-col gap-2">
+              {runs.map(run => (
                 <button
-                  className="text-xs text-primary-500 font-medium"
-                  onClick={() => { onClose(); navigate(`/log/edit/${run.id}`); }}
+                  key={run.id}
+                  type="button"
+                  className="p-3 bg-green-50 dark:bg-green-900/20 rounded-2xl text-left"
+                  onClick={() => { onClose(); navigate(`/runs/${run.id}`); }}
                 >
-                  Edit
+                  <div className="flex gap-4 text-sm text-gray-700 dark:text-gray-300">
+                    <span>{formatDistance(run.distance_value, run.distance_unit)}</span>
+                    <span>{formatDuration(run.duration_seconds)}</span>
+                    <span>{formatPace(calcPaceSeconds(run.distance_value, run.duration_seconds, run.distance_unit), run.distance_unit)}</span>
+                  </div>
+                  {run.effort != null && <p className="text-xs text-gray-500 mt-1">Effort {run.effort}/5</p>}
+                  {run.notes && <p className="text-xs text-gray-500 mt-1">{run.notes}</p>}
                 </button>
-              </div>
-              <div className="flex gap-4 text-sm text-gray-700 dark:text-gray-300">
-                <span>{formatDistance(run.distance_value, run.distance_unit)}</span>
-                <span>{formatDuration(run.duration_seconds)}</span>
-                <span>{formatPace(calcPaceSeconds(run.distance_value, run.duration_seconds, run.distance_unit), run.distance_unit)}</span>
-              </div>
-              {run.notes && <p className="text-xs text-gray-500 mt-1">{run.notes}</p>}
+              ))}
             </div>
           ) : (
             planDay && planDay.activity_type !== 'rest' && (

@@ -192,6 +192,12 @@ const MIGRATIONS = [
 
   // v11 — Starting mileage for used gear
   `ALTER TABLE gear ADD COLUMN starting_distance_mi REAL NOT NULL DEFAULT 0`,
+
+  // v12 — Perceived effort on a run (1–5)
+  `ALTER TABLE runs ADD COLUMN effort INTEGER`,
+
+  // v13 — Race day for the active plan
+  `ALTER TABLE active_plan ADD COLUMN race_date TEXT`,
 ];
 
 // ---------------------------------------------------------------------------
